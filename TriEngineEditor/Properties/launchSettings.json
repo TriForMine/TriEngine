@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TriEngineEditor": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

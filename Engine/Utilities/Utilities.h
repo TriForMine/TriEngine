@@ -1,0 +1,40 @@
+#pragma once
+
+#include <algorithm>
+
+#define USE_STL_VECTOR 1
+#define USE_STL_DEQUE 1
+
+#if USE_STL_VECTOR
+#include <vector>
+namespace triengine::utl {
+	template<typename T>
+	using vector = std::vector<T>;
+
+	template<typename T>
+	void erase_unordered(std::vector<T>& v, size_t index)
+	{
+		if (v.size() > 1)
+		{
+			std::iter_swap(v.begin() + index, v.end() - 1);
+			v.pop_back();
+		}
+		else
+		{
+			v.clear();
+		}
+	}
+}
+#endif
+
+#if USE_STL_DEQUE
+#include <deque>
+namespace triengine::utl {
+	template<typename T>
+	using deque = std::deque<T>;
+}
+#endif
+
+namespace triengine::utl {
+	// TODO: Implement our own containers
+}
