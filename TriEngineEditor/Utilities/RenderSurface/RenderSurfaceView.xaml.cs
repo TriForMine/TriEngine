@@ -19,8 +19,6 @@ namespace TriEngineEditor.Utilities
             WM_SIZE = 0x0005,
         }
         private RenderSurfaceHost? _host = null;
-        private bool _canResize = true;
-        private bool _moved = false;
 
         public RenderSurfaceView()
         {
@@ -35,36 +33,6 @@ namespace TriEngineEditor.Utilities
             _host = new RenderSurfaceHost(ActualWidth, ActualHeight);
             _host.MessageHook += new HwndSourceHook(HostMsgFilter);
             Content = _host;
-
-            var window = this.FindVisualParent<Window>();
-            Debug.Assert(window != null);
-
-            var helper = new WindowInteropHelper(window);
-
-            HwndSource.FromHwnd(helper.Handle).AddHook(HwndMsgFilter);
-        }
-
-        private IntPtr HwndMsgFilter(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            switch ((Win32Msg)msg)
-            {
-                case Win32Msg.WM_SIZING:
-                    _canResize = false;
-                    _moved = false;
-                    break;
-                case Win32Msg.WM_ENTERSIZEMOVE:
-                    _moved = true;
-                    break;
-                case Win32Msg.WM_EXITSIZEMOVE:
-                    _canResize = true;
-                    if (!_moved)
-                        _host?.Resize();
-                    break;
-                default:
-                    break;
-            }
-
-            return IntPtr.Zero;
         }
 
         private IntPtr HostMsgFilter(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -75,8 +43,6 @@ namespace TriEngineEditor.Utilities
                 case Win32Msg.WM_ENTERSIZEMOVE: throw new Exception();
                 case Win32Msg.WM_EXITSIZEMOVE: throw new Exception();
                 case Win32Msg.WM_SIZE:
-                    if (_canResize)
-                        _host?.Resize();
                     break;
             }
 

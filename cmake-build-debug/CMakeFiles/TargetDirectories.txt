@@ -1,0 +1,3 @@
+C:/Users/TriForMine/source/repos/TriEngine/cmake-build-debug/CMakeFiles/TriEngine.dir
+C:/Users/TriForMine/source/repos/TriEngine/cmake-build-debug/CMakeFiles/edit_cache.dir
+C:/Users/TriForMine/source/repos/TriEngine/cmake-build-debug/CMakeFiles/rebuild_cache.dir

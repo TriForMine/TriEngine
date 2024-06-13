@@ -1,4 +1,6 @@
-﻿using System.Windows;
+﻿using System.IO;
+using System.Text;
+using System.Windows;
 using System.Windows.Media;
 
 namespace TriEngineEditor
@@ -16,6 +18,22 @@ namespace TriEngineEditor
             }
 
             return parent as T;
+        }
+    }
+
+    public static class ContentHelper
+    {
+        public static string GetRandomString(int length = 8)
+        {
+            if (length <= 0) length = 8;
+            var n = length / 11;
+            var sb = new StringBuilder();
+            for (var i = 0; i < n; i++)
+            {
+                sb.Append(Path.GetRandomFileName().Replace(".", ""));
+            }
+
+            return sb.ToString(0, length);
         }
     }
 }
