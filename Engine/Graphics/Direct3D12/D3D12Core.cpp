@@ -1,4 +1,5 @@
 #include "D3D12Core.h"
+#include "D3D12Resources.h"
 
 using namespace Microsoft::WRL;
 
@@ -103,8 +104,8 @@ namespace triengine::graphics::d3d12::core {
 				}
 			}
 
-			constexpr ID3D12CommandQueue *const command_queue() const noexcept { return _cmd_queue; }
-			constexpr ID3D12GraphicsCommandList7 *const command_list() const noexcept { return _cmd_list; }
+			constexpr ID3D12CommandQueue* const command_queue() const noexcept { return _cmd_queue; }
+			constexpr ID3D12GraphicsCommandList7* const command_list() const noexcept { return _cmd_list; }
 			constexpr u32 frame_index() const noexcept { return _frame_index; }
 		private:
 			struct command_frame
@@ -126,6 +127,7 @@ namespace triengine::graphics::d3d12::core {
 				void release()
 				{
 					core::release(cmd_allocator);
+					fence_value = 0;
 				}
 			};
 
@@ -141,6 +143,14 @@ namespace triengine::graphics::d3d12::core {
 		ID3D12Device10* main_device{ nullptr };
 		IDXGIFactory7* dxgi_factory{ nullptr };
 		d3d12_command gfx_command;
+		descriptor_heap rtv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV };
+		descriptor_heap dsv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV };
+		descriptor_heap srv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
+		descriptor_heap uav_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
+
+		utl::vector<IUnknown*> deferred_releases[frame_buffer_count]{};
+		u32 deferred_releases_flag[frame_buffer_count]{};
+		std::mutex deferred_releases_mutex{};
 
 		constexpr D3D_FEATURE_LEVEL minimum_feature_level{ D3D_FEATURE_LEVEL_11_0 };
 
@@ -185,6 +195,35 @@ namespace triengine::graphics::d3d12::core {
 			DXCall(device->CheckFeatureSupport(D3D12_FEATURE_FEATURE_LEVELS, &features_level_info, sizeof(features_level_info)));
 			return features_level_info.MaxSupportedFeatureLevel;
 		}
+
+		void __declspec(noinline) process_deferred_releases(u32 frame_idx)
+		{
+			std::lock_guard lock{ deferred_releases_mutex };
+
+			deferred_releases_flag[frame_idx] = 0;
+
+			rtv_desc_heap.process_defered_free(frame_idx);
+			dsv_desc_heap.process_defered_free(frame_idx);
+			srv_desc_heap.process_defered_free(frame_idx);
+			uav_desc_heap.process_defered_free(frame_idx);
+			
+			utl::vector<IUnknown*>& resources{ deferred_releases[frame_idx] };
+			if (!resources.empty())
+			{
+				for (IUnknown* resource : resources) release(resource);
+				resources.clear();
+			}
+		}
+	} // anonymous namespace 
+
+	namespace detail {
+		void deferred_release(IUnknown* resource)
+		{
+			const u32 frame_idx{ current_frame_index() };
+			std::lock_guard lock{ deferred_releases_mutex };
+			deferred_releases[frame_idx].push_back(resource);
+			set_deferred_releases_flag();
+		}
 	}
 
 	bool initialize()
@@ -196,8 +235,14 @@ namespace triengine::graphics::d3d12::core {
 		// Enable debug layer.
 		{
 			ComPtr<ID3D12Debug> debug_interface;
-			DXCall(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_interface)));
-			debug_interface->EnableDebugLayer();
+			if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debug_interface))))
+			{
+				debug_interface->EnableDebugLayer();
+			}
+			else
+			{
+				OutputDebugStringA("Warning: D3D12 Debug Layer is not available. Verify that Graphics Tools optional feature is installed in Windows Settings.\n");
+			}
 			dxgi_factory_flags |= DXGI_CREATE_FACTORY_DEBUG;
 		}
 #endif
@@ -217,10 +262,12 @@ namespace triengine::graphics::d3d12::core {
 		DXCall(hr = D3D12CreateDevice(main_adapter.Get(), max_feature_level, IID_PPV_ARGS(&main_device)));
 		if (FAILED(hr)) return failed_init();
 
-		new (&gfx_command) d3d12_command(main_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
-		if (!gfx_command.command_queue()) return failed_init();
-
-		NAME_D3D12_OBJECT(main_device, L"MAIN DEVICE");
+		bool result{ true };
+		result &= rtv_desc_heap.initialize(512, false);
+		result &= dsv_desc_heap.initialize(512, false);
+		result &= srv_desc_heap.initialize(4096, true);
+		result &= uav_desc_heap.initialize(512, false);
+		if (!result) return failed_init();
 
 #ifdef _DEBUG
 		{
@@ -233,13 +280,35 @@ namespace triengine::graphics::d3d12::core {
 		}
 #endif
 
+		new (&gfx_command) d3d12_command(main_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
+		if (!gfx_command.command_queue()) return failed_init();
+
+		NAME_D3D12_OBJECT(main_device, L"MAIN DEVICE");
+		NAME_D3D12_OBJECT(rtv_desc_heap.heap(), L"RTV DESCRIPTOR HEAP");
+		NAME_D3D12_OBJECT(dsv_desc_heap.heap(), L"DSV DESCRIPTOR HEAP");
+		NAME_D3D12_OBJECT(srv_desc_heap.heap(), L"SRV DESCRIPTOR HEAP");
+		NAME_D3D12_OBJECT(uav_desc_heap.heap(), L"UAV DESCRIPTOR HEAP");
+
 		return true;
 	}
 
 	void shutdown()
 	{
 		gfx_command.release();
+
+		for (u32 i{ 0 }; i < frame_buffer_count; ++i)
+		{
+			process_deferred_releases(i);
+		}
+
 		release(dxgi_factory);
+
+		rtv_desc_heap.release();
+		dsv_desc_heap.release();
+		srv_desc_heap.release();
+		uav_desc_heap.release();
+
+		process_deferred_releases(0);
 
 #ifdef _DEBUG
 		{
@@ -267,8 +336,22 @@ namespace triengine::graphics::d3d12::core {
 		gfx_command.begin_frame();
 		ID3D12GraphicsCommandList7* cmd_list{ gfx_command.command_list() };
 
+		const u32 frame_idx{ current_frame_index() };
+		if (deferred_releases_flag[frame_idx])
+		{
+			process_deferred_releases(frame_idx);
+		}
 
 
 		gfx_command.end_frame();
 	}
+
+	ID3D12Device10* const device()
+	{
+		return main_device;
+	}
+
+	u32 current_frame_index() { return gfx_command.frame_index(); }
+
+	void set_deferred_releases_flag() { deferred_releases_flag[current_frame_index()] = 1; }
 }
