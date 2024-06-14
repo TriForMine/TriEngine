@@ -8,7 +8,7 @@ namespace triengine::tools {
 		void recalculate_normals(mesh& m)
 		{
 			const u32 num_indices{ (u32)m.raw_indices.size() };
-			m.normals.reserve(num_indices);
+			m.normals.resize(num_indices);
 
 			for (u32 i{ 0 }; i < num_indices; ++i)
 			{
@@ -99,7 +99,7 @@ namespace triengine::tools {
 		for (u32 i{ 0 }; i < num_indices; ++i)
 			idx_ref[old_indices[i]].emplace_back(i);
 
-		for (u32 i{ 0 }; i < num_indices; ++i)
+		for (u32 i{ 0 }; i < num_vertices; ++i)
 		{
 			auto& refs{ idx_ref[i] };
 			u32 num_refs{ (u32)refs.size() };
@@ -112,7 +112,7 @@ namespace triengine::tools {
 
 				for (u32 k{ j + 1 }; k < num_refs; ++k)
 				{
-					v2& uv1{ m.uv_sets[0][refs[j]] };
+					v2& uv1{ m.uv_sets[0][refs[k]] };
 					if (XMScalarNearEqual(v.uv.x, uv1.x, epsilon) && XMScalarNearEqual(v.uv.y, uv1.y, epsilon))
 					{
 						m.indices[refs[k]] = m.indices[refs[j]];
@@ -217,6 +217,8 @@ namespace triengine::tools {
 
 			size += lod_size;
 		}
+
+		return size;
 	}
 
 	void pack_mesh_data(const mesh& m, u8* const buffer, u64& at)
@@ -230,7 +232,8 @@ namespace triengine::tools {
 		memcpy(&buffer[at], m.name.c_str(), s); at += s;
 
 		// mesh id
-		memcpy(&buffer[at], &m.lod_id, su32); at += su32;
+		s = m.lod_id;
+		memcpy(&buffer[at], &s, su32); at += su32;
 
 		// vertex size
 		const u32 vertex_size{ sizeof(packed_vertex::vertex_static) };
@@ -273,8 +276,6 @@ namespace triengine::tools {
 		}
 
 		memcpy(&buffer[at], data, s); at += s;
-
-		assert(at == get_mesh_size(m));
 	}
 
 	void pack_data(const scene& scene, scene_data& data)

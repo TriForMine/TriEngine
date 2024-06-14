@@ -18,8 +18,22 @@ namespace TriEngineEditor.ContentToolsAPIStructs
         public byte CalculateNormals = 0;
         public byte CalculateTangents = 1;
         public byte ReverseHandedness = 0;
-        public byte ImportEmbeded_textures = 1;
+        public byte ImportEmbeddedTextures = 1;
         public byte ImportAnimations = 1;
+
+        private byte ToByte(bool value) => value ? (byte)1 : (byte)0;
+
+        public void FromContentSettings(Content.Geometry geometry)
+        {
+            var settings = geometry.ImportSettings;
+
+            SmoothingAngle = settings.SmoothingAngle;
+            CalculateNormals = ToByte(settings.CalculateNormals);
+            CalculateTangents = ToByte(settings.CalculateTangents);
+            ReverseHandedness = ToByte(settings.ReverseHandedness);
+            ImportEmbeddedTextures = ToByte(settings.ImportEmbeddedTextures);
+            ImportAnimations = ToByte(settings.ImportAnimations);
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -67,6 +81,7 @@ namespace TriEngineEditor.DllWrappers
             using var sceneData = new SceneData();
             try
             {
+                sceneData.ImportSettings.FromContentSettings(geometry);
                 CreatePrimitiveMesh(sceneData, info);
                 Debug.Assert(sceneData.Data != IntPtr.Zero && sceneData.DataSize > 0);
                 var data = new byte[sceneData.DataSize];

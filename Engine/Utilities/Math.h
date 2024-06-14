@@ -13,7 +13,7 @@ namespace triengine::math {
     {
         static_assert(bits <= sizeof(u32) * 8);
         assert(f >= 0.f && f <= 1.f);
-        constexpr f32 interval{ (f32)1ui32 << bits - 1 };
+        constexpr f32 interval{ (f32)((1ui32 << bits) - 1) };
         return (u32)(f * interval + 0.5f);
     }
 
@@ -21,8 +21,8 @@ namespace triengine::math {
     constexpr f32 unpack_to_unit_float(u32 i)
     {
         static_assert(bits <= sizeof(u32) * 8);
-        assert(i <= (u32)1ui32 << bits);
-        constexpr f32 interval{ (f32)1ui32 << bits - 1 };
+        assert(i <= (u32)(1ui32 << bits));
+        constexpr f32 interval{ (f32)((1ui32 << bits) - 1) };
         return (f32)i / interval;
     }
 
@@ -39,7 +39,7 @@ namespace triengine::math {
     constexpr f32 unpack_float(u32 i, f32 min, f32 max)
     {
         assert(min < max);
-        assert(i <= (u32)1ui32 << bits);
+        assert(i <= (u32)(1ui32 << bits));
         const f32 distance{ unpack_to_unit_float<bits>(i) };
         return min + distance * (max - min);
     }

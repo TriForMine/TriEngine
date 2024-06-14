@@ -73,5 +73,5 @@ namespace triengine::tools {
 	};
 
 	void process_scene(scene& scene, const geometry_import_settings& settings);
-	void pack_data(const scene& scene, const scene_data& data);
+	void pack_data(const scene& scene, scene_data& data);
 }

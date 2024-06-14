@@ -31,6 +31,7 @@ namespace TriEngineEditor.GameProject
 
         public string FullPath => $@"{Path}{Name}{Extension}";
         public string Solution => $@"{Path}{Name}.sln";
+        public string ContentPath => $@"{Path}Content\";
 
         private static readonly string[] _buildConfigurationNames = { "Debug", "DebugEditor", "Release", "ReleaseEditor" };
 
@@ -72,6 +73,7 @@ namespace TriEngineEditor.GameProject
         public ReadOnlyObservableCollection<Scene> Scenes { get; private set; }
 
         private Scene _activeScene;
+
         public Scene ActiveScene
         {
             get => _activeScene;

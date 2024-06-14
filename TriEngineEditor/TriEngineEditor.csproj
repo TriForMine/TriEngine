@@ -10,12 +10,15 @@
     <AppendTargetFrameworkToOutputPath>False</AppendTargetFrameworkToOutputPath>
     <Configurations>DebugEditor;ReleaseEditor</Configurations>
     <Platforms>x64</Platforms>
+    <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+    <XamlDebuggingInformation>True</XamlDebuggingInformation>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseEditor|x64'">
     <Optimize>True</Optimize>
   </PropertyGroup>
 
+  
   <ItemGroup>
     <COMReference Include="EnvDTE">
       <WrapperTool>tlbimp</WrapperTool>
@@ -37,8 +40,9 @@
     </COMReference>
   </ItemGroup>
 
+  
   <ItemGroup>
-    <Folder Include="Utilities\RenderSurface\" />
+    <Resource Include="Resources\PrimitiveMeshView\PlaneTexture.png" />
   </ItemGroup>
 
 </Project>
