@@ -1,6 +1,6 @@
 #include "D3D12Core.h"
-#include "D3D12Resources.h"
 #include "D3D12Surface.h"
+#include "D3D12Shaders.h"
 
 using namespace Microsoft::WRL;
 
@@ -11,7 +11,7 @@ namespace triengine::graphics::d3d12::core {
 		public:
 			d3d12_command() = default;
 			DISABLE_COPY_AND_MOVE(d3d12_command);
-			explicit d3d12_command(ID3D12Device10* const device, D3D12_COMMAND_LIST_TYPE type)
+			explicit d3d12_command(id3d12_device* const device, D3D12_COMMAND_LIST_TYPE type)
 			{
 				HRESULT hr{ S_OK };
 				D3D12_COMMAND_QUEUE_DESC desc{};
@@ -106,7 +106,7 @@ namespace triengine::graphics::d3d12::core {
 			}
 
 			constexpr ID3D12CommandQueue* const command_queue() const noexcept { return _cmd_queue; }
-			constexpr ID3D12GraphicsCommandList7* const command_list() const noexcept { return _cmd_list; }
+			constexpr id3d12_graphics_command_list* const command_list() const noexcept { return _cmd_list; }
 			constexpr u32 frame_index() const noexcept { return _frame_index; }
 		private:
 			struct command_frame
@@ -133,7 +133,7 @@ namespace triengine::graphics::d3d12::core {
 			};
 
 			ID3D12CommandQueue* _cmd_queue{ nullptr };
-			ID3D12GraphicsCommandList7* _cmd_list{ nullptr };
+			id3d12_graphics_command_list* _cmd_list{ nullptr };
 			ID3D12Fence1* _fence{ nullptr };
 			u64 _fence_value{ 0 };
 			HANDLE _fence_event{ nullptr };
@@ -141,10 +141,12 @@ namespace triengine::graphics::d3d12::core {
 			u32 _frame_index{ 0 };
 		};
 
-		ID3D12Device10* main_device{ nullptr };
+		using surface_collection = utl::free_list<d3d12_surface>;
+
+		id3d12_device* main_device{ nullptr };
 		IDXGIFactory7* dxgi_factory{ nullptr };
 		d3d12_command gfx_command;
-		utl::vector<d3d12_surface> surfaces;
+		surface_collection surfaces;
 		descriptor_heap rtv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_RTV };
 		descriptor_heap dsv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_DSV };
 		descriptor_heap srv_desc_heap{ D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV };
@@ -154,7 +156,6 @@ namespace triengine::graphics::d3d12::core {
 		u32 deferred_releases_flag[frame_buffer_count]{};
 		std::mutex deferred_releases_mutex{};
 
-		constexpr DXGI_FORMAT render_target_format{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB };
 		constexpr D3D_FEATURE_LEVEL minimum_feature_level{ D3D_FEATURE_LEVEL_11_0 };
 
 		bool failed_init()
@@ -169,7 +170,7 @@ namespace triengine::graphics::d3d12::core {
 
 			for (u32 i{ 0 }; dxgi_factory->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&adapter)) != DXGI_ERROR_NOT_FOUND; ++i)
 			{
-				if (SUCCEEDED(D3D12CreateDevice(adapter, minimum_feature_level, __uuidof(ID3D12Device10), nullptr))) {
+				if (SUCCEEDED(D3D12CreateDevice(adapter, minimum_feature_level, __uuidof(id3d12_device), nullptr))) {
 					return adapter;
 				}
 				release(adapter);
@@ -286,6 +287,8 @@ namespace triengine::graphics::d3d12::core {
 		new (&gfx_command) d3d12_command(main_device, D3D12_COMMAND_LIST_TYPE_DIRECT);
 		if (!gfx_command.command_queue()) return failed_init();
 
+		if (!shaders::initialize()) return failed_init();
+
 		NAME_D3D12_OBJECT(main_device, L"MAIN DEVICE");
 		NAME_D3D12_OBJECT(rtv_desc_heap.heap(), L"RTV DESCRIPTOR HEAP");
 		NAME_D3D12_OBJECT(dsv_desc_heap.heap(), L"DSV DESCRIPTOR HEAP");
@@ -304,7 +307,14 @@ namespace triengine::graphics::d3d12::core {
 			process_deferred_releases(i);
 		}
 
+		shaders::shutdown();
+
 		release(dxgi_factory);
+
+		rtv_desc_heap.process_defered_free(0);
+		dsv_desc_heap.process_defered_free(0);
+		srv_desc_heap.process_defered_free(0);
+		uav_desc_heap.process_defered_free(0);
 
 		rtv_desc_heap.release();
 		dsv_desc_heap.release();
@@ -334,7 +344,7 @@ namespace triengine::graphics::d3d12::core {
 		release(main_device);
 	}
 
-	ID3D12Device10* const device()
+	id3d12_device* const device()
 	{
 		return main_device;
 	}
@@ -359,26 +369,21 @@ namespace triengine::graphics::d3d12::core {
 		return uav_desc_heap;
 	}
 
-	DXGI_FORMAT default_render_target_format() {
-		return render_target_format;
-	}
-
 	u32 current_frame_index() { return gfx_command.frame_index(); }
 
 	void set_deferred_releases_flag() { deferred_releases_flag[current_frame_index()] = 1; }
 
 	surface create_surface(platform::window window)
 	{
-		surfaces.emplace_back(window);
-		surface_id id{ (u32)surfaces.size() - 1 };
-		surfaces[id].create_swap_chain(dxgi_factory, gfx_command.command_queue(), render_target_format);
+		surface_id id{ surfaces.add(window) };
+		surfaces[id].create_swap_chain(dxgi_factory, gfx_command.command_queue());
 		return surface{ id };
 	}
 
 	void remove_surface(surface_id id)
 	{
 		gfx_command.flush();
-		surfaces[id].~d3d12_surface();
+		surfaces.remove(id);
 
 	}
 
@@ -401,7 +406,7 @@ namespace triengine::graphics::d3d12::core {
 	void render_surface(surface_id id)
 	{
 		gfx_command.begin_frame();
-		ID3D12GraphicsCommandList7* cmd_list{ gfx_command.command_list() };
+		id3d12_graphics_command_list* cmd_list{ gfx_command.command_list() };
 
 		const u32 frame_idx{ current_frame_index() };
 		if (deferred_releases_flag[frame_idx])
@@ -416,5 +421,4 @@ namespace triengine::graphics::d3d12::core {
 
 		gfx_command.end_frame();
 	}
-
 }

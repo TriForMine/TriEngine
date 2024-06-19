@@ -17,5 +17,7 @@ namespace triengine::graphics {
 			u32(*height)(surface_id);
 			void(*render)(surface_id);
 		} surface;
+
+		graphics_platform platform = (graphics_platform)-1;
 	};
 }

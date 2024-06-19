@@ -5,6 +5,7 @@
 #include "..\Platform\PlatformTypes.h"
 #include "..\Platform\Platform.h"
 #include "..\Graphics\Renderer.h"
+#include "ShaderCompilation.h"
 
 using namespace triengine;
 
@@ -78,8 +79,14 @@ void destroy_render_surface(graphics::render_surface& surface)
 
 bool engine_test::initialize()
 {
-	bool result = graphics::initialize(graphics::graphics_platform::direct3d12);
-	if (!result) return result;
+	while (!compile_shaders())
+	{
+		// POp up a message box allowing the user to retry compilation.
+		if (MessageBox(nullptr, L"Failed to compile shaders. Retry?", L"Error", MB_RETRYCANCEL) != IDRETRY)
+			return false;
+	}
+
+	if (!graphics::initialize(graphics::graphics_platform::direct3d12)) return false;
 
 	platform::window_init_info info[]
 	{
@@ -99,6 +106,7 @@ bool engine_test::initialize()
 void engine_test::run()
 {
 	timer.begin();
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	for (u32 i{ 0 }; i < _countof(_surfaces); ++i)
 	{
 		if (_surfaces[i].surface.is_valid())

@@ -1,11 +1,13 @@
 #pragma once
 #include "D3D12CommonHeader.h"
-#include "D3D12Resources.h"
 
 namespace triengine::graphics::d3d12 {
 	class d3d12_surface
 	{
 	public:
+		constexpr static u32 buffer_count{ 3 };
+		constexpr static DXGI_FORMAT default_back_buffer_format{ DXGI_FORMAT_R8G8B8A8_UNORM_SRGB };
+
 		explicit d3d12_surface(platform::window window)
 			: _window{ window }
 		{
@@ -16,7 +18,7 @@ namespace triengine::graphics::d3d12 {
 		DISABLE_COPY(d3d12_surface);
 		constexpr d3d12_surface(d3d12_surface&& o) : _swap_chain(o._swap_chain), _window(o._window), _current_bb_index(o._current_bb_index), _viewport(o._viewport), _scissor_rect(o._scissor_rect), _allow_tearing(o._allow_tearing), _present_flags(o._present_flags)
 		{
-			for (u32 i = 0; i < frame_buffer_count; ++i)
+			for (u32 i = 0; i < buffer_count; ++i)
 			{
 				_render_target_data[i].resource = o._render_target_data[i].resource;
 				_render_target_data[i].rtv = o._render_target_data[i].rtv;
@@ -39,7 +41,7 @@ namespace triengine::graphics::d3d12 {
 
 		~d3d12_surface() { release(); }
 
-		void create_swap_chain(IDXGIFactory7* factory, ID3D12CommandQueue* cmd_queue, DXGI_FORMAT format);
+		void create_swap_chain(IDXGIFactory7* factory, ID3D12CommandQueue* cmd_queue, DXGI_FORMAT format = default_back_buffer_format);
 		void present() const;
 		void resize();
 
@@ -54,7 +56,7 @@ namespace triengine::graphics::d3d12 {
 			_allow_tearing = o._allow_tearing;
 			_present_flags = o._present_flags;
 
-			for (u32 i = 0; i < frame_buffer_count; ++i)
+			for (u32 i = 0; i < buffer_count; ++i)
 			{
 				_render_target_data[i] = o._render_target_data[i];
 			}
@@ -65,7 +67,7 @@ namespace triengine::graphics::d3d12 {
 		constexpr void reset()
 		{
 			_swap_chain = nullptr;
-			for (u32 i{ 0 }; i < frame_buffer_count; ++i)
+			for (u32 i{ 0 }; i < buffer_count; ++i)
 			{
 				_render_target_data[i] = {};
 			}
@@ -77,6 +79,8 @@ namespace triengine::graphics::d3d12 {
 			_allow_tearing = 0;
 			_present_flags = 0;
 		}
+#else
+		DISABLE_COPY_AND_MOVE(d3d12_surface);
 #endif
 
 		constexpr u32 width() const { return (u32)_viewport.Width; }
@@ -96,8 +100,9 @@ namespace triengine::graphics::d3d12 {
 		};
 
 		IDXGISwapChain4* _swap_chain{ nullptr };
-		render_target_data _render_target_data[frame_buffer_count]{};
+		render_target_data _render_target_data[buffer_count]{};
 		platform::window _window{};
+		DXGI_FORMAT _format{ default_back_buffer_format };
 		mutable u32 _current_bb_index{ 0 };
 		u32 _allow_tearing{ 0 };
 		u32 _present_flags{ 0 };

@@ -33,16 +33,16 @@
 	DISABLE_MOVE(T)
 #endif
 
-// common headers
-#include "PrimitiveTypes.h"
-#include "..\Utilities\Utilities.h"
-#include "..\Utilities\Math.h"
-#include "..\Utilities\MathTypes.h"
-#include "PrimitiveTypes.h"
-#include "Id.h"
-
 #if _DEBUG
 #define DEBUG_OP(x) x
 #else
-#define DEBUG_OP(x) (void(0))
+#define DEBUG_OP(x)
 #endif
+
+// common headers
+#include "PrimitiveTypes.h"
+#include "..\Utilities\Math.h"
+#include "..\Utilities\Utilities.h"
+#include "..\Utilities\MathTypes.h"
+#include "PrimitiveTypes.h"
+#include "Id.h"

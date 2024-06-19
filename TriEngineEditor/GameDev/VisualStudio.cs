@@ -157,7 +157,7 @@ namespace TriEngineEditor.GameDev
             bool result = false;
             bool tryAgain = true;
 
-            for (int i = 0; i < 3 && tryAgain; i++)
+            for (int i = 0; i < 3 && tryAgain; ++i)
             {
                 try
                 {
@@ -184,7 +184,7 @@ namespace TriEngineEditor.GameDev
             OpenVisualStudio(project.Solution);
             BuildDone = BuildSucceded = false;
 
-            for (int i = 0; i < 3 && !BuildDone; i++)
+            for (int i = 0; i < 3 && !BuildDone; ++i)
             {
                 try
                 {
