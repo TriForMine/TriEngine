@@ -134,7 +134,7 @@ namespace {
 		}
 
 	private:
-		const char* _profile_strings[shader_type::count]
+		constexpr static const char* _profile_strings[]
 		{
 			"vs_6_5",
 			"hs_6_5",
@@ -156,7 +156,7 @@ namespace {
 	decltype(auto)
 		get_engine_shaders_path()
 	{
-		return std::filesystem::absolute(graphics::get_engine_shaders_path(graphics::graphics_platform::direct3d12));
+		return std::filesystem::path(graphics::get_engine_shaders_path(graphics::graphics_platform::direct3d12));
 	}
 
 	bool compiled_shaders_are_up_to_date()
@@ -174,7 +174,7 @@ namespace {
 
 			path = shaders_source_path;
 			path += info.file;
-			full_path = std::filesystem::absolute(path);
+			full_path = path;
 			if (!std::filesystem::exists(full_path)) return false;
 			auto file_time = std::filesystem::last_write_time(full_path);
 			if (file_time > shaders_compilation_time) return false;
@@ -223,7 +223,7 @@ bool compile_shaders()
 
 		path = shaders_source_path;
 		path += info.file;
-		full_path = std::filesystem::absolute(path);
+		full_path = path;
 		if (!std::filesystem::exists(full_path)) return false;
 		ComPtr<IDxcBlob> compiled_shader{ compiler.compile(info, full_path) };
 		if (compiled_shader != nullptr && compiled_shader->GetBufferPointer() && compiled_shader->GetBufferSize())
