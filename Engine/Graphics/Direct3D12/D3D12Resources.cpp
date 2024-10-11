@@ -118,6 +118,7 @@ namespace triengine::graphics::d3d12 {
 		_size = (u32)math::align_size_up(info.size, info.alignment);
 		_buffer = d3dx::create_buffer(info.data, _size, is_cpu_accessible, info.initial_state, info.flags, info.heap, info.allocation_info.Offset);
 		NAME_D3D12_OBJECT_INDEXED(_buffer, _size, L"D3D12 Buffer - size");
+		_gpu_address = _buffer->GetGPUVirtualAddress();
 	}
 
 	void d3d12_buffer::release()
