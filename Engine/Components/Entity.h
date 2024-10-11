@@ -18,7 +18,7 @@ namespace triengine {
 		};
 
 		entity create(entity_info info);
-		void remove(entity_id e);
-		bool is_alive(entity_id e);
+		void remove(item_id e);
+		bool is_alive(item_id e);
 	}
 }

@@ -9,7 +9,7 @@ namespace triengine::game_entity {
 		utl::vector<script::component> scripts;
 
 		utl::vector<id::generation_type> generations;
-		utl::deque<entity_id> free_ids;
+		utl::deque<item_id> free_ids;
 	}
 
 	entity create(entity_info info)
@@ -17,19 +17,19 @@ namespace triengine::game_entity {
 		assert(info.transform); // All entities must have a transform
 		if (!info.transform) return {};
 
-		entity_id id;
+		item_id id;
 
 		if (free_ids.size() > id::min_deleted_elements)
 		{
 			id = free_ids.front();
 			assert(!is_alive(id));
 			free_ids.pop_front();
-			id = entity_id{ id::new_generation(id) };
+			id = item_id{ id::new_generation(id) };
 			++generations[id::index(id)];
 		}
 		else
 		{
-			id = entity_id{ (id::id_type)generations.size() };
+			id = item_id{ (id::id_type)generations.size() };
 			generations.push_back(0);
 
 			// Resize components
@@ -57,7 +57,7 @@ namespace triengine::game_entity {
 		return new_entity;
 	}
 
-	void remove(entity_id id)
+	void remove(item_id id)
 	{
 		assert(id::is_valid(id));
 		const id::id_type index{ id::index(id) };
@@ -73,7 +73,7 @@ namespace triengine::game_entity {
 		free_ids.push_back(id);
 	}
 
-	bool is_alive(entity_id id)
+	bool is_alive(item_id id)
 	{
 		assert(id::is_valid(id));
 		const id::id_type index{ id::index(id) };

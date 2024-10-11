@@ -74,7 +74,7 @@ namespace triengine::utl {
 			}
 			assert(_size < _capacity);
 
-			T* const item{ new (std::addressof(_data[_size])) T(std::forward<params>(p)...) };
+			T* const item{ new (std::addressof(_data[_size]) ) T(std::forward<params>(p)...) };
 			++_size;
 			return *item;
 		}
@@ -262,25 +262,23 @@ namespace triengine::utl {
 
 		[[nodiscard]] constexpr T* begin()
 		{
-			assert(_data);
 			return std::addressof(_data[0]);
 		}
 
 		[[nodiscard]] constexpr const T* begin() const
 		{
-			assert(_data);
 			return std::addressof(_data[0]);
 		}
 
 		[[nodiscard]] constexpr T* end()
 		{
-			assert(_data);
+			assert(!(_data == nullptr && _size > 0));
 			return std::addressof(_data[_size]);
 		}
 
 		[[nodiscard]] constexpr const T* end() const
 		{
-			assert(_data);
+			assert(!(_data == nullptr && _size > 0));
 			return std::addressof(_data[_size]);
 		}
 	private:

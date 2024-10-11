@@ -6,6 +6,7 @@ namespace triengine::graphics::d3d12 {
 	{
 		D3D12_CPU_DESCRIPTOR_HANDLE cpu{};
 		D3D12_GPU_DESCRIPTOR_HANDLE gpu{};
+		u32 index{ u32_invalid_id };
 
 		constexpr bool is_valid() const { return cpu.ptr != 0; }
 		constexpr bool is_shader_visible() const { return gpu.ptr != 0; }
@@ -13,7 +14,6 @@ namespace triengine::graphics::d3d12 {
 #ifdef _DEBUG
 		friend class descriptor_heap;
 		descriptor_heap* container{ nullptr };
-		u32 index{ u32_invalid_id };
 #endif
 	};
 
@@ -32,16 +32,16 @@ namespace triengine::graphics::d3d12 {
 		void process_defered_free(u32 frame_idx);
 
 		[[nodiscard]] descriptor_handle allocate();
-		void free(descriptor_handle handle);
+		void free(descriptor_handle& handle);
 
-		constexpr D3D12_DESCRIPTOR_HEAP_TYPE type() const { return _type; }
-		constexpr D3D12_CPU_DESCRIPTOR_HANDLE cpu_start() const { return _cpu_start; }
-		constexpr D3D12_GPU_DESCRIPTOR_HANDLE gpu_start() const { return _gpu_start; }
-		constexpr ID3D12DescriptorHeap* heap() const { return _heap; }
-		constexpr u32 capacity() const { return _capacity; }
-		constexpr u32 size() const { return _size; }
-		constexpr u32 descriptor_size() const { return _descriptor_size; }
-		constexpr bool is_shader_visible() const { return _gpu_start.ptr != 0; }
+		[[nodiscard]] constexpr D3D12_DESCRIPTOR_HEAP_TYPE type() const { return _type; }
+		[[nodiscard]] constexpr D3D12_CPU_DESCRIPTOR_HANDLE cpu_start() const { return _cpu_start; }
+		[[nodiscard]] constexpr D3D12_GPU_DESCRIPTOR_HANDLE gpu_start() const { return _gpu_start; }
+		[[nodiscard]] constexpr ID3D12DescriptorHeap* heap() const { return _heap; }
+		[[nodiscard]] constexpr u32 capacity() const { return _capacity; }
+		[[nodiscard]] constexpr u32 size() const { return _size; }
+		[[nodiscard]] constexpr u32 descriptor_size() const { return _descriptor_size; }
+		[[nodiscard]] constexpr bool is_shader_visible() const { return _gpu_start.ptr != 0; }
 
 	private:
 		ID3D12DescriptorHeap* _heap{ nullptr };
@@ -52,9 +52,128 @@ namespace triengine::graphics::d3d12 {
 		std::mutex _mutex{};
 		u32 _capacity{ 0 };
 		u32 _size{ 0 };
-		u32 _descriptor_size{ 0 };
+		u32 _descriptor_size{};
 		const D3D12_DESCRIPTOR_HEAP_TYPE _type{};
 	};
+
+	struct d3d12_buffer_init_info
+	{
+		ID3D12Heap1* heap{ nullptr };
+		const void* data{ nullptr };
+		D3D12_RESOURCE_ALLOCATION_INFO1 allocation_info{};
+		D3D12_RESOURCE_STATES initial_state{};
+		D3D12_RESOURCE_FLAGS flags{ D3D12_RESOURCE_FLAG_NONE };
+		u32 size{ 0 };
+		u32 stride{ 0 };
+		u32 element_count{ 0 };
+		u32 alignment{ 0 };
+		bool create_uav{ false };
+	};
+
+	class d3d12_buffer
+	{
+	public:
+		d3d12_buffer() = default;
+		explicit d3d12_buffer(d3d12_buffer_init_info info, bool is_cpu_accessible);
+		DISABLE_COPY(d3d12_buffer);
+		constexpr d3d12_buffer(d3d12_buffer&& o)
+			: _buffer{ o._buffer }, _gpu_address{ o._gpu_address }, _size{ o._size }
+		{
+			o.reset();
+		}
+
+		constexpr d3d12_buffer& operator=(d3d12_buffer&& o)
+		{
+			assert(this != &o);
+			if (this != &o)
+			{
+				release();
+				move(o);
+			}
+			return *this;
+		}
+
+		~d3d12_buffer() { release(); }
+
+		void release();
+		[[nodiscard]] constexpr ID3D12Resource *const buffer() const { return _buffer; }
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS gpu_address() const { return _gpu_address; }
+		[[nodiscard]] constexpr u32 size() const { return _size; }
+	private:
+		constexpr void move(d3d12_buffer& o)
+		{
+			_buffer = o._buffer;
+			_gpu_address = o._gpu_address;
+			_size = o._size;
+			o.reset();
+		}
+
+		constexpr void reset()
+		{
+			_buffer = nullptr;
+			_gpu_address = 0;
+			_size = 0;
+		}
+
+		ID3D12Resource* _buffer{ nullptr };
+		D3D12_GPU_VIRTUAL_ADDRESS _gpu_address{ 0 };
+		u32 _size{ 0 };
+	};
+
+	class constant_buffer
+	{
+	public:
+		constant_buffer() = default;
+		explicit constant_buffer(d3d12_buffer_init_info info);
+		DISABLE_COPY_AND_MOVE(constant_buffer);
+		~constant_buffer() { release(); }
+
+		void release()
+		{
+			_buffer.release();
+			_cpu_address = nullptr;
+			_cpu_offset = 0;
+		}
+
+		constexpr void clear() { _cpu_offset = 0; };
+		[[nodiscard]] u8* const allocate(u32 size);
+
+		template<typename T>
+		[[nodiscard]] T* const allocate()
+		{
+			return (T* const)allocate(sizeof(T));
+		}
+
+		[[nodiscard]] constexpr ID3D12Resource* const buffer() const { return _buffer.buffer(); };
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS gpu_address() const { return _buffer.gpu_address(); };
+		[[nodiscard]] constexpr u32 size() const { return _buffer.size(); };
+		[[nodiscard]] constexpr u8* const cpu_address() const { return _cpu_address; };
+
+		template<typename T>
+		[[nodiscard]] constexpr D3D12_GPU_VIRTUAL_ADDRESS gpu_address(T* const allocation)
+		{
+			std::lock_guard lock{ _mutex };
+			assert(_cpu_address);
+			if (!_cpu_address) return {};
+			const u8* const address{ (const u8* const)allocation };
+			assert(address <= _cpu_address + _cpu_offset);
+			assert(address >= _cpu_address);
+			const u64 offset{ (u64)(address - _cpu_address) };
+			return _buffer.gpu_address() + offset;
+		}
+
+		[[nodiscard]] constexpr static d3d12_buffer_init_info get_default_init_info(u32 size)
+		{
+			assert(size);
+			return d3d12_buffer_init_info{ .size = size, .alignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT };
+		}
+	private:
+		d3d12_buffer _buffer{};
+		u8* _cpu_address{ nullptr };
+		u32 _cpu_offset{ 0 };
+		std::mutex _mutex{};
+	};
+
 
 	struct d3d12_texture_init_info
 	{
@@ -71,6 +190,7 @@ namespace triengine::graphics::d3d12 {
 	{
 	public:
 		constexpr static u32 max_mips{ 14 }; // supports up to 16k resolution
+
 		d3d12_texture() = default;
 		explicit d3d12_texture(d3d12_texture_init_info info);
 		DISABLE_COPY(d3d12_texture);
@@ -92,8 +212,8 @@ namespace triengine::graphics::d3d12 {
 		~d3d12_texture() { release(); }
 
 		void release();
-		constexpr ID3D12Resource* const resource() const { return _resource; }
-		constexpr descriptor_handle srv() const { return _srv; }
+		[[nodiscard]] constexpr ID3D12Resource* const resource() const { return _resource; }
+		[[nodiscard]] constexpr descriptor_handle srv() const { return _srv; }
 	private:
 		constexpr void move(d3d12_texture& o)
 		{
@@ -120,7 +240,7 @@ namespace triengine::graphics::d3d12 {
 		DISABLE_COPY(d3d12_render_texture);
 		constexpr d3d12_render_texture(d3d12_render_texture&& o) noexcept : _texture{ std::move(o._texture) }, _mip_count{ o._mip_count }
 		{
-			std::copy(std::begin(o._rtv), std::end(o._rtv), std::begin(_rtv));
+			for (u32 i{ 0 }; i < o._mip_count; ++i) _rtv[i] = o._rtv[i];
 			o.reset();
 		}
 
@@ -134,27 +254,27 @@ namespace triengine::graphics::d3d12 {
 			}
 			return *this;
 		}
+
 		~d3d12_render_texture() { release(); }
 
 		void release();
-		constexpr u32 mip_count() const { return _mip_count; }
-		constexpr D3D12_CPU_DESCRIPTOR_HANDLE rtv(u32 mip_index) const { assert(mip_index < _mip_count); return _rtv[mip_index].cpu; }
-		constexpr descriptor_handle srv() const { return _texture.srv(); }
-		constexpr ID3D12Resource* const resource() const { return _texture.resource(); }
+		[[nodiscard]] constexpr u32 mip_count() const { return _mip_count; }
+		[[nodiscard]] constexpr D3D12_CPU_DESCRIPTOR_HANDLE rtv(u32 mip_index) const { assert(mip_index < _mip_count); return _rtv[mip_index].cpu; }
+		[[nodiscard]] constexpr descriptor_handle srv() const { return _texture.srv(); }
+		[[nodiscard]] constexpr ID3D12Resource* const resource() const { return _texture.resource(); }
 	private:
 		constexpr void move(d3d12_render_texture& o)
 		{
 			_texture = std::move(o._texture);
 			_mip_count = o._mip_count;
-			std::copy(std::begin(o._rtv), std::end(o._rtv), std::begin(_rtv));
+			for (u32 i{ 0 }; i < _mip_count; ++i) _rtv[i] = o._rtv[i];
 			o.reset();
 		}
 
 		constexpr void reset()
 		{
-			_texture = {};
+			for (u32 i{ 0 }; i < d3d12_texture::max_mips; ++i) _rtv[i] = {};
 			_mip_count = 0;
-			std::fill(std::begin(_rtv), std::end(_rtv), descriptor_handle{});
 		}
 
 		d3d12_texture _texture{};
@@ -170,7 +290,7 @@ namespace triengine::graphics::d3d12 {
 		DISABLE_COPY(d3d12_depth_buffer);
 		constexpr d3d12_depth_buffer(d3d12_depth_buffer&& o) noexcept : _texture{ std::move(o._texture) }, _dsv{ o._dsv }
 		{
-			o.reset();
+			o._dsv = {};
 		}
 
 		constexpr d3d12_depth_buffer& operator=(d3d12_depth_buffer&& o) noexcept
@@ -180,7 +300,7 @@ namespace triengine::graphics::d3d12 {
 			{
 				_texture = std::move(o._texture);
 				_dsv = o._dsv;
-				move(o);
+				o._dsv = {};
 			}
 			return *this;
 		}
@@ -188,23 +308,10 @@ namespace triengine::graphics::d3d12 {
 		~d3d12_depth_buffer() { release(); }
 
 		void release();
-		constexpr D3D12_CPU_DESCRIPTOR_HANDLE dsv() const { return _dsv.cpu; }
-		constexpr descriptor_handle srv() const { return _texture.srv(); }
-		constexpr ID3D12Resource* const resource() const { return _texture.resource(); }
+		[[nodiscard]] constexpr D3D12_CPU_DESCRIPTOR_HANDLE dsv() const { return _dsv.cpu; }
+		[[nodiscard]] constexpr descriptor_handle srv() const { return _texture.srv(); }
+		[[nodiscard]] constexpr ID3D12Resource* const resource() const { return _texture.resource(); }
 	private:
-		constexpr void move(d3d12_depth_buffer& o)
-		{
-			_texture = std::move(o._texture);
-			_dsv = o._dsv;
-			o.reset();
-		}
-
-		constexpr void reset()
-		{
-			_texture = {};
-			_dsv = {};
-		}
-
 		d3d12_texture _texture{};
 		descriptor_handle _dsv{};
 	};

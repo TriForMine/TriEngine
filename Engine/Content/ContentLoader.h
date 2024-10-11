@@ -2,7 +2,7 @@
 #pragma once
 #include "CommonHeaders.h"
 
-#if !defined(SHIPPING)
+#if !defined(SHIPPING) && defined(_WIN64)
 
 namespace triengine::content {
 	bool load_game();

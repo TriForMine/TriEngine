@@ -1,9 +1,9 @@
 #include "Common.h"
 #include "CommonHeaders.h"
 #include "Id.h"
-#include "..\Engine\Components\Entity.h"
-#include "..\Engine\Components\Transform.h"
-#include "..\Engine\Components\Script.h"
+#include "Components\Entity.h"
+#include "Components\Transform.h"
+#include "Components\Script.h"
 
 using namespace triengine;
 
@@ -48,7 +48,7 @@ namespace {
 
 	game_entity::entity entity_from_id(id::id_type id)
 	{
-		return game_entity::entity{ game_entity::entity_id{ id } };
+		return game_entity::entity{ game_entity::item_id{ id } };
 	}
 }
 
@@ -72,5 +72,5 @@ EDITOR_INTERFACE
 void RemoveGameEntity(id::id_type id)
 {
 	assert(id::is_valid(id));
-	game_entity::remove(game_entity::entity_id(id));
+	game_entity::remove(game_entity::item_id(id));
 }

@@ -8,6 +8,7 @@
              xmlns:ctlr="clr-namespace:TriEngineEditor.Utilities.Controls"
              xmlns:sys="clr-namespace:System;assembly=mscorlib"
              xmlns:gameproject="clr-namespace:TriEngineEditor.GameProject"
+             xmlns:c="clr-namespace:TriEngineEditor.Content"
              d:DataContext="{d:DesignInstance Type=gameproject:Project}"
              mc:Ignorable="d" Focusable="True"
              d:DesignHeight="450" d:DesignWidth="800">
@@ -15,6 +16,11 @@
         <sys:Boolean x:Key="True">True</sys:Boolean>
         <sys:Boolean x:Key="False">False</sys:Boolean>
     </UserControl.Resources>
+    <UserControl.CommandBindings>
+        <CommandBinding Command="ApplicationCommands.New" Executed="OnNewProject" />
+        <CommandBinding Command="ApplicationCommands.Open" Executed="OnOpenProject" />
+        <CommandBinding Command="ApplicationCommands.Close" Executed="OnEditorClose" />
+    </UserControl.CommandBindings>
     <UserControl.InputBindings>
         <KeyBinding Command="{Binding UndoCommand}" Key="Z" Modifiers="Ctrl" />
         <KeyBinding Command="{Binding RedoCommand}" Key="Y" Modifiers="Ctrl" />
@@ -26,10 +32,25 @@
     </UserControl.InputBindings>
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="32" />
+            <RowDefinition Height="auto" />
+            <RowDefinition Height="auto" />
             <RowDefinition />
         </Grid.RowDefinitions>
-        <StackPanel Orientation="Horizontal">
+        <Menu Grid.Row="0">
+            <MenuItem Header="File">
+                <MenuItem Header="New Project..." Command="ApplicationCommands.New" />
+                <MenuItem Header="Open Project..." Command="ApplicationCommands.Open" />
+                <Separator />
+                <MenuItem Header="Save Project..." Command="{Binding SaveCommand}" />
+                <Separator />
+                <MenuItem Header="Exit" Command="ApplicationCommands.Close" />
+            </MenuItem>
+            <MenuItem Header="Settings"></MenuItem>
+            <MenuItem Header="View"></MenuItem>
+            <MenuItem Header="Create" IsEnabled="False"></MenuItem>
+            <MenuItem Header="Window"></MenuItem>
+        </Menu>
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="20,10">
             <Button Content="Undo" Command="{Binding UndoCommand}" />
             <Button Content="Redo" Command="{Binding RedoCommand}" Margin="5, 0" />
             <Button Content="New Script" Click="OnNewScript_Button_Click" IsEnabled="{Binding Path=IsEnabled, ElementName=buildButton}" />
@@ -41,7 +62,7 @@
             </ComboBox>
             <Button Content="Primitive Mesh" Click="OnCreatePrimitiveMesh_Button_Click" Margin="10, 0" />
         </StackPanel>
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition />
                 <ColumnDefinition Width="Auto" />
@@ -70,12 +91,15 @@
                 <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Top" Background="Transparent" />
                 <Grid Grid.Row="1" Margin="0,5,0,0">
                     <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="250" />
                         <ColumnDefinition />
                         <ColumnDefinition />
                     </Grid.ColumnDefinitions>
                     <utl:UndoRedoView DataContext="{Binding UndoRedo}" Grid.Column="0"  Background="{StaticResource Editor.Window.GrayBrush2}" />
                     <GridSplitter Grid.Column="1" Width="5" VerticalAlignment="Stretch" HorizontalAlignment="Left" Background="Transparent" />
                     <utl:LoggerView DataContext="{Binding Logger}" Grid.Column="1"  Background="{StaticResource Editor.Window.GrayBrush2}" />
+                    <GridSplitter Grid.Column="2" Width="5" VerticalAlignment="Stretch" HorizontalAlignment="Left" Background="Transparent" />
+                    <c:ContentBrowserView Grid.Column="2" Margin="5,0,0,0" />
                 </Grid>
             </Grid>
             <GridSplitter Grid.Column="1" Width="5" VerticalAlignment="Stretch" HorizontalAlignment="Left" Background="Transparent" />

@@ -9,6 +9,8 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using TriEngineEditor.DllWrappers;
+using TriEngineEditor.GameProject;
 using TriEngineEditor.Utilities;
 
 namespace TriEngineEditor.Content
@@ -23,18 +25,39 @@ namespace TriEngineEditor.Content
         Capsule
     }
 
+    enum ElementsType
+    {
+        Position = 0x00,
+        Normals = 0x01,
+        TSpace = 0x03,
+        Joints = 0x04,
+        Colors = 0x08
+    }
+
+    enum PrimitiveTopology
+    {
+        PointList = 1,
+        LineList,
+        LineStrip,
+        TriangleList,
+        TriangleStrip,
+    };
+
     class Mesh : ViewModelBase
     {
-        private int _vertexSize;
-        public int VertexSize
+        public static int PositionSize = sizeof(float) * 3;
+
+        private int _elementSize;
+
+        public int ElementSize
         {
-            get => _vertexSize;
+            get => _elementSize;
             set
             {
-                if (_vertexSize != value)
+                if (_elementSize != value)
                 {
-                    _vertexSize = value;
-                    OnPropertyChanged(nameof(VertexSize));
+                    _elementSize = value;
+                    OnPropertyChanged(nameof(ElementSize));
                 }
             }
         }
@@ -81,7 +104,26 @@ namespace TriEngineEditor.Content
             }
         }
 
-        public byte[] Vertices { get; set; }
+        private string _name;
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                if (_name != value)
+                {
+                    _name = value;
+                    OnPropertyChanged(nameof(Name));
+                }
+            }
+        }
+
+        public ElementsType ElementsType { get; set; }
+
+        public PrimitiveTopology PrimitiveTopology { get; set; }
+
+        public byte[] Positions { get; set; }
+        public byte[] Elements { get; set; }
         public byte[] Indices { get; set; }
     }
 
@@ -223,6 +265,16 @@ namespace TriEngineEditor.Content
             writer.Write(ImportEmbeddedTextures);
             writer.Write(ImportAnimations);
         }
+
+        public void FromBinary(BinaryReader reader)
+        {
+            CalculateNormals = reader.ReadBoolean();
+            CalculateTangents = reader.ReadBoolean();
+            SmoothingAngle = reader.ReadSingle();
+            ReverseHandedness = reader.ReadBoolean();
+            ImportEmbeddedTextures = reader.ReadBoolean();
+            ImportAnimations = reader.ReadBoolean();
+        }
     }
 
     class LODGroup : ViewModelBase
@@ -247,13 +299,14 @@ namespace TriEngineEditor.Content
     class Geometry : Asset
     {
         private readonly List<LODGroup> _lodGroups = new List<LODGroup>();
+        private readonly object _lock = new object();
 
         public GeometryImportSettings ImportSettings { get; } = new GeometryImportSettings();
 
         public LODGroup? GetLODGroup(int lodGroup = 0)
         {
             Debug.Assert(lodGroup >= 0 && lodGroup < _lodGroups.Count);
-            return _lodGroups.Any() ? _lodGroups[lodGroup] : null;
+            return (lodGroup < _lodGroups.Count) ? _lodGroups[lodGroup] : null;
         }
 
         public void FromRawData(byte[] data)
@@ -325,19 +378,22 @@ namespace TriEngineEditor.Content
                 Console.WriteLine($"Mesh name is empty, using random name: {meshName}");
             }
 
-            var mesh = new Mesh();
+            var mesh = new Mesh() { Name = meshName };
 
             var lodId = reader.ReadInt32();
-            mesh.VertexSize = reader.ReadInt32();
+            mesh.ElementSize = reader.ReadInt32();
+            mesh.ElementsType = (ElementsType)reader.ReadInt32();
+            mesh.PrimitiveTopology = PrimitiveTopology.TriangleList;
             mesh.VertexCount = reader.ReadInt32();
             mesh.IndexSize = reader.ReadInt32();
             mesh.IndexCount = reader.ReadInt32();
             var lodThreshold = reader.ReadSingle();
 
-            var vertexBufferSize = mesh.VertexSize * mesh.VertexCount;
-            mesh.Vertices = reader.ReadBytes(vertexBufferSize);
-
+            var elementBufferSize = mesh.ElementSize * mesh.VertexCount;
             var indexBufferSize = mesh.IndexSize * mesh.IndexCount;
+
+            mesh.Positions = reader.ReadBytes(Mesh.PositionSize * mesh.VertexCount);
+            mesh.Elements = reader.ReadBytes(elementBufferSize);
             mesh.Indices = reader.ReadBytes(indexBufferSize);
 
             MeshLOD lod;
@@ -356,6 +412,89 @@ namespace TriEngineEditor.Content
             lod.Meshes.Add(mesh);
         }
 
+        public override void Import(string file)
+        {
+            Debug.Assert(File.Exists(file));
+            Debug.Assert(!string.IsNullOrEmpty(FullPath));
+            var ext = Path.GetExtension(file).ToLower();
+
+            SourcePath = file;
+
+            try
+            {
+                if (ext == ".fbx")
+                {
+                    ImportFbx(file);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+                Logger.Log(MessageType.Error, $"Failed to import geometry: {file}");
+            }
+        }
+
+        private void ImportFbx(string file)
+        {
+            Logger.Log(MessageType.Info, $"Importing FBX file: {file}");
+            var tempPath = Application.Current.Dispatcher.Invoke(() => Project.Current.TempFolder);
+            if (string.IsNullOrEmpty(tempPath)) return;
+
+            lock (_lock)
+            {
+                if (!Directory.Exists(tempPath)) Directory.CreateDirectory(tempPath);
+            }
+
+            var tempFile = $"{tempPath}{ContentHelper.GetRandomString()}.fbx";
+            File.Copy(file, tempFile, true);
+            ContentToolsAPI.ImportFbx(tempFile, this);
+        }
+
+        public override void Load(string file)
+        {
+            Debug.Assert(File.Exists(file));
+            Debug.Assert(Path.GetExtension(file) == AssetFileExtension);
+
+            try
+            {
+                byte[] data = null;
+                using (var reader = new BinaryReader(File.Open(file, FileMode.Open, FileAccess.Read)))
+                {
+                    ReadAssetFileHeader(reader);
+                    ImportSettings.FromBinary(reader);
+                    int dataLength = reader.ReadInt32();
+                    Debug.Assert(dataLength > 0);
+                    data = reader.ReadBytes(dataLength);
+                }
+
+                Debug.Assert(data?.Length > 0);
+
+                using (var reader = new BinaryReader(new MemoryStream(data)))
+                {
+                    LODGroup lodGroup = new LODGroup();
+                    lodGroup.Name = reader.ReadString();
+                    var lodCount = reader.ReadInt32();
+
+                    for (int i = 0; i < lodCount; ++i)
+                    {
+                        lodGroup.LODs.Add(BinaryToLOD(reader));
+                    }
+
+                    _lodGroups.Clear();
+                    _lodGroups.Add(lodGroup);
+                }
+
+                // For Testing. Remove Later!
+                //PackForEngine();
+                // For Testing. Remove Later!
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine(ex.Message);
+                Logger.Log(MessageType.Error, $"Failed to load geometry: {file}");
+            }
+        }
+
         public override IEnumerable<string> Save(string file)
         {
             Debug.Assert(_lodGroups.Any());
@@ -371,10 +510,12 @@ namespace TriEngineEditor.Content
                 {
                     Debug.Assert(lodGroup.LODs.Any());
                     // Use the name of most detailed LOD group as the file name
-                    var meshFileName = ContentHelper.SanitizeFileName($"{path}{fileName}_{lodGroup.LODs[0].Name}{AssetFileExtension}");
+                    var meshFileName = ContentHelper.SanitizeFileName(
+                        path + fileName + ((_lodGroups.Count > 1) ? "_" + ((lodGroup.LODs.Count > 1) ? lodGroup.Name : lodGroup.LODs[0].Name) : string.Empty) + AssetFileExtension
+                    );
 
-                    // NoTE: we have to make a different id for each new asset file.
-                    Guid = Guid.NewGuid();
+                    // NoTE: we have to make a different id for each new asset file, but if a file is overwritten, we should keep the same id
+                    Guid = TryGetAssetInfo(meshFileName) is AssetInfo info && info.Type == Type ? info.Guid : Guid.NewGuid();
                     byte[] data = null;
                     using (var writer = new BinaryWriter(new MemoryStream()))
                     {
@@ -396,12 +537,13 @@ namespace TriEngineEditor.Content
 
                     using (var writer = new BinaryWriter(File.Open(meshFileName, FileMode.Create, FileAccess.Write)))
                     {
-                        WriteAssetFileHeade(writer);
+                        WriteAssetFileHeader(writer);
                         ImportSettings.ToBinary(writer);
                         writer.Write(data.Length);
                         writer.Write(data);
                     }
 
+                    Logger.Log(MessageType.Info, $"Saved geometry: {meshFileName}");
                     savedFiles.Add(meshFileName);
                 }
             }
@@ -414,6 +556,77 @@ namespace TriEngineEditor.Content
             return savedFiles;
         }
 
+        /// <summary>
+        /// Packs the geometry into a byte array which can be used by the engine.
+        /// </summary>
+        /// <returns>
+        /// struct {
+        ///     u32 lod_count,
+        ///     struct {
+        ///          float lod_threshold,
+        ///          u32 submesh_count,
+        ///          u32 size_of_submeshes,
+        ///          struct {
+        ///              u32 element_size, u32 vertex_count,
+        ///              u32 index_count, u32 elements_type, u32 primitive_topology
+        ///              u8 positions[sizeof(f32) * 3 * vertex_count],
+        ///              u8 elements[sizeof(element_size) * index_count],
+        ///              u8 indices[index_size * index_count]
+        ///          } submeshes[submesh_count]
+        ///     } mesh_lods[lod_count]
+        /// } geometry;
+        /// </returns>
+        public override byte[] PackForEngine()
+        {
+            using var writer = new BinaryWriter(new MemoryStream());
+
+            writer.Write(GetLODGroup().LODs.Count);
+            foreach (var lod in GetLODGroup().LODs)
+            {
+                writer.Write(lod.LodThreshold);
+                writer.Write(lod.Meshes.Count);
+                var sizeOfSubmeshesPosition = writer.BaseStream.Position;
+                writer.Write(0);
+                foreach (var mesh in lod.Meshes)
+                {
+                    writer.Write(mesh.ElementSize);
+                    writer.Write(mesh.VertexCount);
+                    writer.Write(mesh.IndexCount);
+                    writer.Write((int)mesh.ElementsType);
+                    writer.Write((int)mesh.PrimitiveTopology);
+
+                    var alignedPositionBuffer = new byte[MathUtil.AlignSizeUp(mesh.Positions.Length, 4)];
+                    Array.Copy(mesh.Positions, alignedPositionBuffer, mesh.Positions.Length);
+                    var alignedElementBuffer = new byte[MathUtil.AlignSizeUp(mesh.Elements.Length, 4)];
+                    Array.Copy(mesh.Elements, alignedElementBuffer, mesh.Elements.Length);
+
+                    writer.Write(alignedPositionBuffer);
+                    writer.Write(alignedElementBuffer);
+                    writer.Write(mesh.Indices);
+                }
+
+                var endOfSubmeshes = writer.BaseStream.Position;
+                var sizeOfSubmeshes = (int)(endOfSubmeshes - sizeOfSubmeshesPosition - sizeof(int));
+
+                writer.BaseStream.Position = sizeOfSubmeshesPosition;
+                writer.Write(sizeOfSubmeshes);
+                writer.BaseStream.Position = endOfSubmeshes;
+            }
+
+            writer.Flush();
+            var data = (writer.BaseStream as MemoryStream)?.ToArray();
+            Debug.Assert(data?.Length > 0);
+
+            // For Testing. Remove Later!
+            using (var fs = new FileStream(@"..\..\EngineTest\model.model", FileMode.Create))
+            {
+                fs.Write(data, 0, data.Length);
+            }
+            // For Testing. Remove Later!
+
+            return data;
+        }
+
         private void LODToBinary(MeshLOD lod, BinaryWriter writer, out byte[]? hash)
         {
             writer.Write(lod.Name);
@@ -424,11 +637,15 @@ namespace TriEngineEditor.Content
 
             foreach (var mesh in lod.Meshes)
             {
-                writer.Write(mesh.VertexSize);
+                writer.Write(mesh.Name);
+                writer.Write(mesh.ElementSize);
+                writer.Write((int)mesh.ElementsType);
+                writer.Write((int)mesh.PrimitiveTopology);
                 writer.Write(mesh.VertexCount);
                 writer.Write(mesh.IndexSize);
                 writer.Write(mesh.IndexCount);
-                writer.Write(mesh.Vertices);
+                writer.Write(mesh.Positions);
+                writer.Write(mesh.Elements);
                 writer.Write(mesh.Indices);
             }
 
@@ -438,30 +655,58 @@ namespace TriEngineEditor.Content
             hash = ContentHelper.ComputeHash(buffer, (int)meshDataBegin, (int)meshDataSize);
         }
 
+        private MeshLOD BinaryToLOD(BinaryReader reader)
+        {
+            var lod = new MeshLOD();
+            lod.Name = reader.ReadString();
+            lod.LodThreshold = reader.ReadSingle();
+            var meshCount = reader.ReadInt32();
+
+            for (int i = 0; i < meshCount; ++i)
+            {
+                var mesh = new Mesh()
+                {
+                    Name = reader.ReadString(),
+                    ElementSize = reader.ReadInt32(),
+                    ElementsType = (ElementsType)reader.ReadInt32(),
+                    PrimitiveTopology = (PrimitiveTopology)reader.ReadInt32(),
+                    VertexCount = reader.ReadInt32(),
+                    IndexSize = reader.ReadInt32(),
+                    IndexCount = reader.ReadInt32()
+                };
+
+                mesh.Positions = reader.ReadBytes(Mesh.PositionSize * mesh.VertexCount);
+                mesh.Elements = reader.ReadBytes(mesh.ElementSize * mesh.VertexCount);
+                mesh.Indices = reader.ReadBytes(mesh.IndexSize * mesh.IndexCount);
+
+                lod.Meshes.Add(mesh);
+            }
+
+            return lod;
+        }
+
         private byte[] GenerateIcon(MeshLOD lod)
         {
-            var width = 90 * 4;
-            var height = 90 * 4;
+            var width = ContentInfo.IconWidth * 4;
 
+            using var memStream = new MemoryStream();
             BitmapSource? bmp = null;
 
             Application.Current.Dispatcher.Invoke(() =>
             {
-                bmp = Editors.GeometryView.RenderToBitmap(new Editors.MeshRenderer(lod, null), width, height);
+                bmp = Editors.GeometryView.RenderToBitmap(new Editors.MeshRenderer(lod, null), width, width);
                 bmp = new TransformedBitmap(bmp, new ScaleTransform(0.25, 0.25, 0.5, 0.5));
+
+                memStream.SetLength(0);
+
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bmp));
+                encoder.Save(memStream);
             });
-
-            if (bmp == null) return Array.Empty<byte>();
-
-            using var memStream = new MemoryStream();
-            memStream.SetLength(0);
-
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(bmp));
-            encoder.Save(memStream);
 
             return memStream.ToArray();
         }
+
 
         public Geometry() : base(AssetType.Mesh)
         {

@@ -3,6 +3,11 @@
 #include "Graphics\Renderer.h"
 #include "Platform\Window.h"
 
+// Skip defintion of min/max macros in Windows.h
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <dxgi1_6.h>
 #include <d3d12.h>
 #include <wrl.h>
@@ -43,7 +48,7 @@ if (FAILED(x)) {									\
 #ifdef _DEBUG
 #define NAME_D3D12_OBJECT(x, name) x->SetName(name); OutputDebugString(L"::D3D12 Object Created: "); OutputDebugString(name); OutputDebugString(L"\n");
 
-#define NAME_D3D12_OBJECT_INDEXED(x, index, name) wchar_t buffer[128]; swprintf_s(buffer, L"%s[%u]", name, index); x->SetName(buffer); OutputDebugString(L"::D3D12 Object Created: "); OutputDebugString(buffer); OutputDebugString(L"\n");
+#define NAME_D3D12_OBJECT_INDEXED(x, index, name) { wchar_t buffer[128]; swprintf_s(buffer, L"%s[%llu]", name, (u64)index); x->SetName(buffer); OutputDebugString(L"::D3D12 Object Created: "); OutputDebugString(buffer); OutputDebugString(L"\n"); }
 #else
 #define NAME_D3D12_OBJECT(x, name)
 

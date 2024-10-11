@@ -27,10 +27,20 @@ namespace triengine::platform {
 			return get_from_id(id);
 		}
 
+		bool resized{ false };
+
 		LRESULT CALLBACK internal_window_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 			window_info* info{ nullptr };
 			switch (msg)
 			{
+			case WM_NCCREATE:
+			{
+				DEBUG_OP(SetLastError(0));
+				const window_id id{ windows.add() };
+				windows[id].hwnd = hwnd;
+				SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)id);
+				assert(GetLastError() == 0);
+			}
 			case WM_DESTROY:
 				get_from_handle(hwnd).is_closed = true;
 				break;
@@ -38,22 +48,18 @@ namespace triengine::platform {
 				info = &get_from_handle(hwnd);
 				break;
 			case WM_SIZE:
-				if (wparam == SIZE_MAXIMIZED) {
-					info = &get_from_handle(hwnd);
-				}
-			case WM_SYSCOMMAND:
-				if (wparam == SC_RESTORE) {
-					info = &get_from_handle(hwnd);
-				}
+				resized = (wparam != SIZE_MINIMIZED);
 				break;
 			default:
 				break;
 			}
 
-			if (info)
+			if (resized && GetAsyncKeyState(VK_LBUTTON) >= 0)
 			{
-				assert(info->hwnd);
-				GetClientRect(info->hwnd, info->is_fullscreen ? &info->fullscreen_area : &info->client_area);
+				window_info& info{ get_from_handle(hwnd) };
+				assert(info.hwnd);
+				GetClientRect(info.hwnd, info.is_fullscreen ? &info.fullscreen_area : &info.client_area);
+				resized = false;
 			}
 
 			LONG_PTR long_ptr{ GetWindowLongPtr(hwnd, 0) };
@@ -144,7 +150,7 @@ namespace triengine::platform {
 		}
 	} // anonymous namespace
 
-	window create_window(const window_init_info* const init_info) {
+	window create_window(const window_init_info* init_info) {
 		window_proc callback{ init_info ? init_info->callback : nullptr };
 		window_handle parent{ init_info ? init_info->parent : nullptr };
 
@@ -188,14 +194,15 @@ namespace triengine::platform {
 		if (info.hwnd)
 		{
 			DEBUG_OP(SetLastError(0));
-			const window_id id{ windows.add(info) };
-			SetWindowLongPtr(info.hwnd, GWLP_USERDATA, (LONG_PTR)id);
-
 			if (callback) SetWindowLongPtr(info.hwnd, 0, reinterpret_cast<LONG_PTR>(callback));
 			assert(GetLastError() == 0);
 
 			ShowWindow(info.hwnd, SW_SHOWNORMAL);
 			UpdateWindow(info.hwnd);
+
+			window_id id{ (id::id_type)GetWindowLongPtr(info.hwnd, GWLP_USERDATA) };
+			windows[id] = info;
+
 			return window{ id };
 		}
 
@@ -207,63 +214,8 @@ namespace triengine::platform {
 		DestroyWindow(info.hwnd);
 		windows.remove(id);
 	}
-
-#elif
-#error "Unsupported platform"
-#endif 
-
-	void window::set_fullscreen(bool is_fullscreen) const
-	{
-		assert(is_valid());
-		set_window_fullscreen(_id, is_fullscreen);
-	}
-
-	bool window::is_fullscreen() const
-	{
-		assert(is_valid());
-		return is_window_fullscreen(_id);
-	}
-
-	void* window::handle() const
-	{
-		assert(is_valid());
-		return get_window_handle(_id);
-	}
-
-	void window::set_caption(const wchar_t* caption) const
-	{
-		assert(is_valid());
-		set_window_caption(_id, caption);
-	}
-
-	math::u32v4 window::size() const
-	{
-		assert(is_valid());
-		return get_window_size(_id);
-	}
-
-	void window::resize(u32 width, u32 height) const
-	{
-		assert(is_valid());
-		resize_window(_id, width, height);
-	}
-
-	u32 window::width() const
-	{
-		math::u32v4 s{ size() };
-		return s.z - s.x;
-	}
-
-	u32 window::height() const
-	{
-		math::u32v4 s{ size() };
-		return s.w - s.y;
-	}
-
-	bool window::is_closed() const
-	{
-		assert(is_valid());
-		return is_window_closed(_id);
-	}
-
 }
+
+#include "IncludeWindowCpp.h"
+
+#endif 

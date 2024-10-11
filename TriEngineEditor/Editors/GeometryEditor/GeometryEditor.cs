@@ -15,6 +15,35 @@ namespace TriEngineEditor.Editors
 {
     class MeshRendererVertexData : ViewModelBase
     {
+        private bool _isHighlighted;
+        public bool IsHighlighted
+        {
+            get => _isHighlighted;
+            set
+            {
+                if (_isHighlighted != value)
+                {
+                    _isHighlighted = value;
+                    OnPropertyChanged(nameof(IsHighlighted));
+                    OnPropertyChanged(nameof(Diffuse));
+                }
+            }
+        }
+
+        private bool _isIsolated;
+        public bool IsIsolated
+        {
+            get => _isIsolated;
+            set
+            {
+                if (_isIsolated != value)
+                {
+                    _isIsolated = value;
+                    OnPropertyChanged(nameof(IsIsolated));
+                }
+            }
+        }
+
         private Brush _specular = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF111111"));
         public Brush Specular
         {
@@ -32,7 +61,7 @@ namespace TriEngineEditor.Editors
         private Brush _diffuse = Brushes.White;
         public Brush Diffuse
         {
-            get => _diffuse;
+            get => _isHighlighted ? Brushes.Orange : _diffuse;
             set
             {
                 if (_diffuse != value)
@@ -43,10 +72,11 @@ namespace TriEngineEditor.Editors
             }
         }
 
+        public string Name { get; set; }
         public Point3DCollection Positions { get; } = new Point3DCollection();
         public Vector3DCollection Normals { get; } = new Vector3DCollection();
         public PointCollection UVs { get; } = new PointCollection();
-        public Int32Collection Indices { get; } = new Int32Collection();    
+        public Int32Collection Indices { get; } = new Int32Collection();
     }
 
     class MeshRenderer : ViewModelBase
@@ -100,7 +130,7 @@ namespace TriEngineEditor.Editors
 
         public Point3D OffsetCameraPosition => new Point3D(CameraPosition.X + CameraTarget.X, CameraPosition.Y + CameraTarget.Y, CameraPosition.Z + CameraTarget.Z);
 
-        public Color _keyLight = ( Color)ColorConverter.ConvertFromString("#FFAEAEAE");
+        public Color _keyLight = (Color)ColorConverter.ConvertFromString("#FFAEAEAE");
         public Color KeyLight
         {
             get => _keyLight;
@@ -159,9 +189,6 @@ namespace TriEngineEditor.Editors
         public MeshRenderer(MeshLOD? lod, MeshRenderer old)
         {
             Debug.Assert(lod?.Meshes.Any() == true);
-            // Calculate vertex size minus the position and normal vectors
-            var offset = lod.Meshes[0].VertexSize - 3 * sizeof(float) - sizeof(int) - 2 * sizeof(short);
-
             double minX, minY, minZ; minX = minY = minZ = double.MaxValue;
             double maxX, maxY, maxZ; maxX = maxY = maxZ = double.MinValue;
             Vector3D avgNormal = new Vector3D();
@@ -170,38 +197,57 @@ namespace TriEngineEditor.Editors
 
             foreach (var mesh in lod.Meshes)
             {
-                var vertexData = new MeshRendererVertexData();
+                var vertexData = new MeshRendererVertexData() { Name = mesh.Name };
 
-                using (var reader = new BinaryReader(new MemoryStream(mesh.Vertices)))
-                {
+                using (var reader = new BinaryReader(new MemoryStream(mesh.Positions)))
                     for (var i = 0; i < mesh.VertexCount; ++i)
                     {
                         var posX = reader.ReadSingle();
                         var posY = reader.ReadSingle();
                         var posZ = reader.ReadSingle();
-                        var signs = (reader.ReadUInt32() >> 24) & 0x000000FF;
                         vertexData.Positions.Add(new Point3D(posX, posY, posZ));
 
                         minX = Math.Min(minX, posX); maxX = Math.Max(maxX, posX);
                         minY = Math.Min(minY, posY); maxY = Math.Max(maxY, posY);
                         minZ = Math.Min(minZ, posZ); maxZ = Math.Max(maxZ, posZ);
-
-                        var nrmX = reader.ReadUInt16() * intervals - 1.0f;
-                        var nrmY = reader.ReadUInt16() * intervals - 1.0f;
-                        var nrmZ = Math.Sqrt(Math.Clamp(1.0f - nrmX * nrmX - nrmY * nrmY, 0.0f, 1.0f)) * ((signs & 0x2) - 1f);
-                        var normal = new Vector3D(nrmX, nrmY, nrmZ);
-                        normal.Normalize();
-                        vertexData.Normals.Add(normal);
-                        avgNormal += normal;
-
-                        reader.BaseStream.Position += (offset - sizeof(float) * 2);
-                        var u = reader.ReadSingle();
-                        var v = reader.ReadSingle();
-                        vertexData.UVs.Add(new Point(u, v));
                     }
+
+                if (mesh.ElementsType.HasFlag(ElementsType.Normals))
+                {
+                    var tSpaceOffset = 0;
+                    if (mesh.ElementsType.HasFlag(ElementsType.Joints)) tSpaceOffset = sizeof(short) * 4;
+                    // Read tangent space
+                    using (var reader = new BinaryReader(new MemoryStream(mesh.Elements)))
+                        for (int i = 0; i < mesh.VertexCount; ++i)
+                        {
+                            var signs = (reader.ReadUInt32() >> 24) & 0x000000FF;
+
+                            // Read normals
+                            var nrmX = reader.ReadUInt16() * intervals - 1.0f;
+                            var nrmY = reader.ReadUInt16() * intervals - 1.0f;
+                            var nrmZ = Math.Sqrt(Math.Clamp(1.0f - nrmX * nrmX - nrmY * nrmY, 0.0f, 1.0f)) * ((signs & 0x2) - 1f);
+                            var normal = new Vector3D(nrmX, nrmY, nrmZ);
+                            normal.Normalize();
+                            vertexData.Normals.Add(normal);
+                            avgNormal += normal;
+
+                            // read UVs
+                            if (mesh.ElementsType.HasFlag(ElementsType.TSpace))
+                            {
+                                reader.BaseStream.Position += sizeof(short) * 2; // skip tangent
+                                var u = reader.ReadSingle();
+                                var v = reader.ReadSingle();
+                                vertexData.UVs.Add(new Point(u, v));
+                            }
+
+                            if (mesh.ElementsType.HasFlag(ElementsType.Joints) && mesh.ElementsType.HasFlag(ElementsType.Colors))
+                            {
+                                reader.BaseStream.Position += 4; // skip color
+                            }
+                        }
                 }
 
-                using(var reader = new BinaryReader(new MemoryStream(mesh.Indices)))
+                using (var reader = new BinaryReader(new MemoryStream(mesh.Indices)))
                 {
                     if (mesh.IndexSize == sizeof(short))
                         for (var i = 0; i < mesh.IndexCount; ++i)
@@ -222,6 +268,16 @@ namespace TriEngineEditor.Editors
             {
                 CameraTarget = old.CameraTarget;
                 CameraPosition = old.CameraPosition;
+
+                foreach (var mesh in old.Meshes)
+                {
+                    mesh.IsHighlighted = false;
+                }
+
+                foreach (var mesh in Meshes)
+                {
+                    mesh.Diffuse = old.Meshes.First().Diffuse;
+                }
             }
             else
             {
@@ -248,7 +304,7 @@ namespace TriEngineEditor.Editors
 
     class GeometryEditor : ViewModelBase, IAssetEditor
     {
-        public Content.Asset Asset => _geometry;
+        Asset IAssetEditor.Asset => _geometry;
 
         private Content.Geometry _geometry;
         public Content.Geometry Geometry
@@ -274,6 +330,68 @@ namespace TriEngineEditor.Editors
                 {
                     _renderer = value;
                     OnPropertyChanged(nameof(MeshRenderer));
+                    var lods = Geometry.GetLODGroup()?.LODs;
+                    MaxLODIndex = (lods.Count > 0) ? lods.Count - 1 : 0;
+                    OnPropertyChanged(nameof(MaxLODIndex));
+                    if (lods.Count > 1)
+                    {
+                        MeshRenderer.PropertyChanged += (s, e) =>
+                        {
+                            if (e.PropertyName == nameof(MeshRenderer.OffsetCameraPosition) && AutoLOD) ComputeLOD(lods);
+                        };
+
+                        ComputeLOD(lods);
+                    }
+                }
+            }
+        }
+
+
+        private bool _autoLOD = true;
+        public bool AutoLOD
+        {
+            get => _autoLOD;
+            set
+            {
+                if (_autoLOD != value)
+                {
+                    _autoLOD = value;
+                    OnPropertyChanged(nameof(AutoLOD));
+                }
+            }
+        }
+
+        public int MaxLODIndex { get; private set; }
+
+        private int _lodIndex;
+        public int LODIndex
+        {
+            get => _lodIndex;
+            set
+            {
+                var lods = Geometry.GetLODGroup()?.LODs;
+                value = Math.Clamp(value, 0, lods.Count - 1);
+                if (_lodIndex != value)
+                {
+                    _lodIndex = value;
+                    OnPropertyChanged(nameof(LODIndex));
+                    MeshRenderer = new MeshRenderer(lods[value], MeshRenderer);
+                }
+            }
+        }
+
+        private void ComputeLOD(IList<MeshLOD> lods)
+        {
+            if (!AutoLOD) return;
+
+            var p = MeshRenderer.OffsetCameraPosition;
+            var distance = new Vector3D(p.X, p.Y, p.Z).Length;
+            for (int i = MaxLODIndex; i >= 0; --i)
+            {
+                if (lods[i].LodThreshold < distance)
+                {
+                    LODIndex = i;
+                    break;
                 }
             }
         }
@@ -284,8 +402,37 @@ namespace TriEngineEditor.Editors
             if (asset is Content.Geometry geometry)
             {
                 Geometry = geometry;
-                MeshRenderer = new MeshRenderer(Geometry.GetLODGroup()?.LODs[0], MeshRenderer);
+                var numLods = geometry.GetLODGroup().LODs.Count;
+                if (LODIndex >= numLods)
+                {
+                    LODIndex = numLods - 1;
+                }
+                else
+                {
+                    MeshRenderer = new MeshRenderer(Geometry.GetLODGroup()?.LODs[0], MeshRenderer);
+                }
+            }
+        }
+
+        public async void SetAsset(AssetInfo info)
+        {
+            try
+            {
+                Debug.Assert(info != null && File.Exists(info.FullPath));
+                var geometry = new Content.Geometry();
+                await Task.Run(() =>
+                {
+                    geometry.Load(info.FullPath);
+                });
+
+                SetAsset(geometry);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to set asset: {info.Guid}");
+                Debug.WriteLine(ex.Message);
             }
         }
     }
+
 }

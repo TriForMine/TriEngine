@@ -9,16 +9,31 @@ using System.Runtime.InteropServices.ComTypes;
 using System.Runtime.InteropServices;
 using System.IO;
 using TriEngineEditor.GameProject;
+using System.Printing;
 
 namespace TriEngineEditor.GameDev
 {
+    enum BuildConfiguration
+    {
+        Debug,
+        DebugEditor,
+        Release,
+        ReleaseEditor
+    }
+
     static class VisualStudio
     {
+        private static ManualResetEventSlim _resetEvent = new ManualResetEventSlim(false);
+        private static readonly string _progID = "VisualStudio.DTE.17.0";
+        private static readonly object _lock = new object();
+        private static readonly string[] _buildConfigurationNames = { "Debug", "DebugEditor", "Release", "ReleaseEditor" };
+        private static EnvDTE80.DTE2? _vsInstance = null;
+
         public static bool BuildSucceded { get; private set; } = true;
         public static bool BuildDone { get; private set; } = true;
 
-        private static EnvDTE80.DTE2 _vsInstance = null;
-        private static readonly string _progID = "VisualStudio.DTE.17.0";
+        public static string GetConfigurationName(BuildConfiguration config) => _buildConfigurationNames[(int)config];
+
 
         [DllImport("ole32.dll")]
         private static extern int CreateBindCtx(int reserved, out IBindCtx ppbc);
@@ -26,13 +41,29 @@ namespace TriEngineEditor.GameDev
         [DllImport("ole32.dll")]
         private static extern int GetRunningObjectTable(int reserved, out IRunningObjectTable pprot);
 
-        public static void OpenVisualStudio(string solutionPath)
+        private static void CallOnSTAThread(Action action)
+        {
+            var thread = new Thread(() =>
+            {
+                MessageFilter.Register();
+                try { action(); }
+                catch (Exception ex) { Logger.Log(MessageType.Warning, ex.Message); }
+                finally { MessageFilter.Revoke(); }
+            });
+
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+        }
+
+        private static void OpenVisualStudio_Internal(string solutionPath)
         {
             IRunningObjectTable rot = null;
             IEnumMoniker monikerTable = null;
             IBindCtx bindCtx = null;
 
-            try {
+            try
+            {
                 if (_vsInstance == null)
                 {
                     // Find and open 
@@ -54,9 +85,13 @@ namespace TriEngineEditor.GameDev
                         {
                             hResult = rot.GetObject(currentMoniker[0], out object obj);
                             if (hResult < 0) throw new COMException($"GetObject failed with hResult: {hResult:X8}");
-
                             EnvDTE80.DTE2 dte = obj as EnvDTE80.DTE2;
-                            var solutionName = dte.Solution.FullName;
+
+                            var solutionName = string.Empty;
+                            CallOnSTAThread(() =>
+                            {
+                                solutionName = dte.Solution.FullName;
+                            });
                             if (solutionName == solutionPath)
                             {
                                 _vsInstance = dte;
@@ -71,7 +106,8 @@ namespace TriEngineEditor.GameDev
                         _vsInstance = Activator.CreateInstance(visualStudioType) as EnvDTE80.DTE2;
                     }
                 }
-            } catch(Exception e)
+            }
+            catch (Exception e)
             {
                 Debug.WriteLine(e.Message);
                 Logger.Log(MessageType.Error, "Failed to open Visual Studio. Make sure you have Visual Studio installed and the version is compatible with the editor.");
@@ -84,49 +120,72 @@ namespace TriEngineEditor.GameDev
             }
         }
 
-        public static void CloseVisualStudio()
+        public static void OpenVisualStudio(string solutionPath)
         {
-            if (_vsInstance?.Solution.IsOpen == true)
-            {
-                _vsInstance.ExecuteCommand("File.SaveAll");
-                _vsInstance.Solution.Close(true);
+
+            lock (_lock) {
+                OpenVisualStudio_Internal(solutionPath); 
             }
-            _vsInstance?.Quit();
         }
 
-        internal static bool AddFilesToSolution(string solution, string projectName, string[] files)
+        private static void CloseVisualStudio_Internal()
+        {
+            CallOnSTAThread(() =>
+            {
+                if (_vsInstance?.Solution.IsOpen == true)
+                {
+                    _vsInstance.ExecuteCommand("File.SaveAll");
+                    _vsInstance.Solution.Close(true);
+                }
+                _vsInstance?.Quit();
+                _vsInstance = null;
+            });
+        }
+
+        public static void CloseVisualStudio()
+        {
+            lock (_lock)
+            {
+                CloseVisualStudio_Internal();
+            }
+        }
+
+        private static bool AddFilesToSolution_Internal(string solution, string projectName, string[] files)
         {
             Debug.Assert(files?.Length > 0, "No files to add to solution.");
-            OpenVisualStudio(solution);
+            OpenVisualStudio_Internal(solution);
             try
             {
                 if (_vsInstance != null)
                 {
-                    if (!_vsInstance.Solution.IsOpen) _vsInstance.Solution.Open(solution);
-                    else _vsInstance.ExecuteCommand("File.SaveAll");
-
-                    foreach (EnvDTE.Project project in _vsInstance.Solution.Projects)
+                    CallOnSTAThread(() =>
                     {
-                        if (project.UniqueName.Contains(projectName))
+                        if (!_vsInstance.Solution.IsOpen) _vsInstance.Solution.Open(solution);
+                        else _vsInstance.ExecuteCommand("File.SaveAll");
+
+                        foreach (EnvDTE.Project project in _vsInstance.Solution.Projects)
                         {
-                            foreach (string file in files)
+                            if (project.UniqueName.Contains(projectName))
                             {
-                                if (!System.IO.File.Exists(file)) continue;
-                                project.ProjectItems.AddFromFile(file);
+                                foreach (string file in files)
+                                {
+                                    if (!System.IO.File.Exists(file)) continue;
+                                    project.ProjectItems.AddFromFile(file);
+                                }
                             }
                         }
-                    }
 
-                    var cpp = files.FirstOrDefault(f => Path.GetExtension(f) == ".cpp");
-                    if (!string.IsNullOrEmpty(cpp))
-                    {
-                        _vsInstance.ItemOperations.OpenFile(cpp, "{7651A703-06E5-11D1-8EBD-00A0C90F26EA}").Visible = true;
-                    }
-                    _vsInstance.MainWindow.Activate();
-                    _vsInstance.MainWindow.Visible = true;
+                        var cpp = files.FirstOrDefault(f => Path.GetExtension(f) == ".cpp");
+                        if (!string.IsNullOrEmpty(cpp))
+                        {
+                            _vsInstance.ItemOperations.OpenFile(cpp, "{7651A703-06E5-11D1-8EBD-00A0C90F26EA}").Visible = true;
+                        }
+                        _vsInstance.MainWindow.Activate();
+                        _vsInstance.MainWindow.Visible = true;
+                    });
                 }
             }
-            catch(Exception e)
+            catch (Exception e)
             {
                 Debug.WriteLine(e.Message);
                 Logger.Log(MessageType.Error, "Failed to add files to solution.");
@@ -135,9 +194,19 @@ namespace TriEngineEditor.GameDev
 
             return true;
         }
+
+        public static bool AddFilesToSolution(string solution, string projectName, string[] files)
+        {
+            lock (_lock)
+            {
+                return AddFilesToSolution_Internal(solution, projectName, files);
+            }
+        }
+
         private static void OnBuildSolutionBegin(string project, string projectConfig, string platform, string solutionConfig)
         {
             if (BuildDone) return;
+
             Logger.Log(MessageType.Info, $"Building solution: {project}, {projectConfig}, {platform}, {solutionConfig}");
         }
 
@@ -150,86 +219,118 @@ namespace TriEngineEditor.GameDev
 
             BuildDone = true;
             BuildSucceded = success;
+            _resetEvent.Set();
         }
 
-        public static bool IsDebugging()
+        private static bool IsDebugging_Internal()
         {
             bool result = false;
-            bool tryAgain = true;
 
-            for (int i = 0; i < 3 && tryAgain; ++i)
+            CallOnSTAThread(() =>
             {
-                try
-                {
-                    result = _vsInstance != null && (_vsInstance.Debugger?.CurrentProgram != null || _vsInstance.Debugger.CurrentMode == EnvDTE.dbgDebugMode.dbgRunMode);
-                    tryAgain = false;
-                }
-                catch (Exception e)
-                {
-                    Debug.WriteLine(e.Message);
-                    Thread.Sleep(1000);
-                }
-            }
+                result = _vsInstance != null && (_vsInstance.Debugger?.CurrentProgram != null || _vsInstance.Debugger.CurrentMode == EnvDTE.dbgDebugMode.dbgRunMode);
+            });
 
             return result;
         }
 
-        internal static void BuildSolution(Project project, string configName, bool showWindow = true)
+        public static bool IsDebugging()
         {
-            if (IsDebugging())
+            lock (_lock)
+            {
+                return IsDebugging_Internal();
+            }
+        }
+
+        private static void BuildSolution_Internal(Project project, BuildConfiguration buildConfig, bool showWindow = true)
+        {
+            if (IsDebugging_Internal())
             {
                 Logger.Log(MessageType.Error, "Visual Studio is currently debugging. Please stop debugging before building the solution.");
             }
 
-            OpenVisualStudio(project.Solution);
+            OpenVisualStudio_Internal(project.Solution);
             BuildDone = BuildSucceded = false;
 
-            for (int i = 0; i < 3 && !BuildDone; ++i)
+
+            CallOnSTAThread(() =>
             {
-                try
+                _vsInstance.MainWindow.Visible = showWindow;
+                if (!_vsInstance.Solution.IsOpen)
+                    _vsInstance.Solution.Open(project.Solution);
+
+                _vsInstance.Events.BuildEvents.OnBuildProjConfigBegin += OnBuildSolutionBegin;
+                _vsInstance.Events.BuildEvents.OnBuildProjConfigDone += OnBuildSolutionDone;
+            });
+
+
+
+            var configName = GetConfigurationName(buildConfig);
+
+            try
+            {
+                foreach (var pdbFile in Directory.GetFiles(Path.Combine($"{project.Path}", $@"x64\{configName}"), "*.pdb"))
                 {
-                    if (!_vsInstance.Solution.IsOpen) _vsInstance.Solution.Open(project.Solution);
-                    _vsInstance.MainWindow.Visible = showWindow;
-
-                    _vsInstance.Events.BuildEvents.OnBuildProjConfigBegin += OnBuildSolutionBegin;
-                    _vsInstance.Events.BuildEvents.OnBuildProjConfigDone += OnBuildSolutionDone;
-
-                    try {
-                        foreach (var pdbFile in Directory.GetFiles(Path.Combine($"{project.Path}", $@"x64\{configName}"), "*.pdb"))
-                        {
-                            File.Delete(pdbFile);
-                        }
-                    } catch (Exception e)
-                    {
-                        Debug.WriteLine(e.Message);
-                    }
-
-                    _vsInstance.Solution.SolutionBuild.SolutionConfigurations.Item(configName).Activate();
-                    _vsInstance.Solution.SolutionBuild.Build(true);
+                    File.Delete(pdbFile);
                 }
-                catch (Exception e)
-                {
-                    Debug.WriteLine(e.Message);
-                    Debug.WriteLine($"Attempt {i} failed to build solution.");
-                    Logger.Log(MessageType.Error, $"Failed to build solution: {e.Message}");
-                    Thread.Sleep(1000);
-                }
+            }
+            catch (Exception e)
+            {
+                Debug.WriteLine(e.Message);
+            }
+
+            CallOnSTAThread(() =>
+            {
+                _vsInstance.Solution.SolutionBuild.SolutionConfigurations.Item(configName).Activate();
+                _vsInstance.Solution.SolutionBuild.Build(true);
+                _resetEvent.Wait();
+                _resetEvent.Reset();
+            });
+        }
+
+        public static void BuildSolution(Project project, BuildConfiguration buildConfig, bool showWindow = true)
+        {
+            lock (_lock)
+            {
+                BuildSolution_Internal(project, buildConfig, showWindow);
             }
         }
 
-        public static void Run(Project project, string configName, bool debug)
+        private static void Run_Internal(Project project, BuildConfiguration buildConfig, bool debug)
         {
-            if (_vsInstance != null && !IsDebugging() && BuildDone && BuildSucceded)
+            CallOnSTAThread(() =>
             {
-                _vsInstance.ExecuteCommand(debug ? "Debug.Start" : "Debug.StartWithoutDebugging");
+                if (_vsInstance != null && !IsDebugging_Internal() && BuildSucceded)
+                {
+                    _vsInstance.ExecuteCommand(debug ? "Debug.Start" : "Debug.StartWithoutDebugging");
+                }
+            });
+        }
+
+        public static void Run(Project project, BuildConfiguration buildConfig, bool debug)
+        {
+            lock (_lock)
+            {
+                Run_Internal(project, buildConfig, debug);
             }
+        }
+
+        private static void Stop_Internal()
+        {
+            CallOnSTAThread(() =>
+            {
+                if (_vsInstance != null && IsDebugging_Internal())
+                {
+                    _vsInstance.Debugger.Stop(true);
+                }
+            });
         }
 
         public static void Stop()
         {
-            if (_vsInstance != null && IsDebugging())
+            lock (_lock)
             {
-                _vsInstance.Debugger.Stop(true);
+                Stop_Internal();
             }
         }
     }

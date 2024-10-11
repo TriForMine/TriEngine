@@ -88,26 +88,25 @@ namespace TriEngineEditor.GameProject
         }
 
 
-        private ObservableCollection<ProjectTemplate> _projectTemplates = new ObservableCollection<ProjectTemplate>();
+        private readonly ObservableCollection<ProjectTemplate> _projectTemplates = new ObservableCollection<ProjectTemplate>();
         public ReadOnlyObservableCollection<ProjectTemplate> ProjectTemplates { get; }
 
         private bool ValidateProjectPath()
         {
-            var pathRegex = new Regex(@"^(?<ParentPath>(?:[a-zA-Z]\:|\\\\[\w\s\.]+\\[\w\s\.$ ]+)\\(?:[\w\s\.]+\\)*)(?<BaseName>[\w\s\.]*?)$");
-
-
             var path = ProjectPath;
 
             if (!Path.EndsInDirectorySeparator(path)) path += @"\";
             path += $@"{ProjectName}\";
 
-            IsValid = false;
+            var pathRegex = new Regex(@"^(?<ParentPath>(?:[a-zA-Z]\:|\\\\[\w\s\.]+\\[\w\s\.$ ]+)\\(?:[\w\s\.]+\\)*)(?<BaseName>[\w\s\.]*?)$");
+            var nameRegex = new Regex(@"^[a-zA-Z_][a-zA-Z0-9_]*$");
 
+            IsValid = false;
             if (string.IsNullOrWhiteSpace(ProjectName.Trim()))
             {
                 ErrorMsg = "Project name cannot be empty";
             }
-            else if (ProjectName.IndexOfAny(Path.GetInvalidFileNameChars()) != -1)
+            else if (!nameRegex.IsMatch(ProjectName))
             {
                 ErrorMsg = "Project name contains invalid characters";
             }
@@ -177,13 +176,13 @@ namespace TriEngineEditor.GameProject
             Debug.Assert(File.Exists(Path.Combine(template.TemplatePath, "MSVCSolution")));
             Debug.Assert(File.Exists(Path.Combine(template.TemplatePath, "MSVCProject")));
 
-            var engineAPIPath = Path.Combine(MainWindow.TriEnginePath, @"Engine\EngineAPI\");
+            var engineAPIPath = @"$(TRIENGINE_ENGINE)Engine\EngineAPI\";
             Debug.Assert(Directory.Exists(engineAPIPath));
 
             var _0 = ProjectName;
             var _1 = "{" + Guid.NewGuid().ToString().ToUpper() + "}";
             var _2 = engineAPIPath;
-            var _3 = MainWindow.TriEnginePath;
+            var _3 = "$(TRIENGINE_ENGINE)";
 
             var solution = File.ReadAllText(Path.Combine(template.TemplatePath, "MSVCSolution"));
             solution = string.Format(solution, _0, _1, "{" + Guid.NewGuid().ToString().ToUpper() + "}");

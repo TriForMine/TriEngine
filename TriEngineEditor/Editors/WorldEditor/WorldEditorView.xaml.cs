@@ -34,5 +34,25 @@ namespace TriEngineEditor.Editors
             var dlg = new PrimitiveMeshDialog();
             dlg.ShowDialog();
         }
+
+        private void OnNewProject(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            ProjectBrowserDialog.GotoNewProjectTab = true;
+            Project.Current?.Unload();
+            Application.Current.MainWindow.DataContext = null;
+            Application.Current.MainWindow.Close();
+        }
+
+        private void OnOpenProject(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            Project.Current?.Unload();
+            Application.Current.MainWindow.DataContext = null;
+            Application.Current.MainWindow.Close();
+        }
+
+        private void OnEditorClose(object sender, System.Windows.Input.ExecutedRoutedEventArgs e)
+        {
+            Application.Current.MainWindow.Close();
+        }
     }
 }

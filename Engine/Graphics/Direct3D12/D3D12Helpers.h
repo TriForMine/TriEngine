@@ -11,7 +11,295 @@ namespace triengine::graphics::d3d12::d3dx {
 			0,
 			0
 		};
+
+		const D3D12_HEAP_PROPERTIES upload_heap
+		{
+			D3D12_HEAP_TYPE_UPLOAD,
+			D3D12_CPU_PAGE_PROPERTY_UNKNOWN,
+			D3D12_MEMORY_POOL_UNKNOWN,
+			0,
+			0
+		};
 	} heap_properties;
+
+	constexpr struct {
+		const D3D12_RASTERIZER_DESC no_cull{
+			D3D12_FILL_MODE_SOLID,
+			D3D12_CULL_MODE_NONE,
+			0,
+			0,
+			0,
+			0,
+			1,
+			1,
+			0,
+			0,
+			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
+		};
+
+		const D3D12_RASTERIZER_DESC backface_cull{
+			D3D12_FILL_MODE_SOLID,
+			D3D12_CULL_MODE_BACK,
+			0,
+			0,
+			0,
+			0,
+			1,
+			1,
+			0,
+			0,
+			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
+		};
+
+		const D3D12_RASTERIZER_DESC frontface_cull{
+			D3D12_FILL_MODE_SOLID,
+			D3D12_CULL_MODE_FRONT,
+			0,
+			0,
+			0,
+			0,
+			1,
+			1,
+			0,
+			0,
+			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
+		};
+
+		const D3D12_RASTERIZER_DESC wireframe{
+			D3D12_FILL_MODE_WIREFRAME,
+			D3D12_CULL_MODE_NONE,
+			0,
+			0,
+			0,
+			0,
+			1,
+			1,
+			0,
+			0,
+			D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF,
+		};
+	} rasterizer_state;
+
+	constexpr struct {
+		const D3D12_DEPTH_STENCIL_DESC1 disabled{
+			0,
+			D3D12_DEPTH_WRITE_MASK_ZERO,
+			D3D12_COMPARISON_FUNC_LESS_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0,
+		};
+
+		const D3D12_DEPTH_STENCIL_DESC1 enabled{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ALL,
+			D3D12_COMPARISON_FUNC_LESS_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0,
+		};
+
+		const D3D12_DEPTH_STENCIL_DESC1 enabled_readonly{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ZERO,
+			D3D12_COMPARISON_FUNC_LESS_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0,
+		};
+
+		const D3D12_DEPTH_STENCIL_DESC1 reversed{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ALL,
+			D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0,
+		};
+
+		const D3D12_DEPTH_STENCIL_DESC1 reversed_readonly{
+			1,
+			D3D12_DEPTH_WRITE_MASK_ZERO,
+			D3D12_COMPARISON_FUNC_GREATER_EQUAL,
+			0,
+			0,
+			0,
+			{},
+			{},
+			0,
+		};
+	} depth_state;
+
+	constexpr struct {
+		const D3D12_BLEND_DESC disabled{
+			0,
+			0,
+			{
+				{
+					0,
+					0,
+					D3D12_BLEND_SRC_ALPHA,
+					D3D12_BLEND_INV_SRC_ALPHA,
+					D3D12_BLEND_OP_ADD,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_INV_SRC_ALPHA,
+					D3D12_BLEND_OP_ADD,
+					D3D12_LOGIC_OP_NOOP,
+					D3D12_COLOR_WRITE_ENABLE_ALL,
+				},
+			{},{},{},{},{},{},{}
+			}
+		};
+
+		const D3D12_BLEND_DESC alpha_blend{
+			0,
+			0,
+			{
+				{
+					1,
+					0,
+					D3D12_BLEND_SRC_ALPHA,
+					D3D12_BLEND_INV_SRC_ALPHA,
+					D3D12_BLEND_OP_ADD,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_OP_ADD,
+					D3D12_LOGIC_OP_NOOP,
+					D3D12_COLOR_WRITE_ENABLE_ALL,
+				},
+			{},{},{},{},{},{},{}
+			}
+		};
+
+		const D3D12_BLEND_DESC additive{
+			0,
+			0,
+			{
+				{
+					1,
+					0,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_OP_ADD,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_OP_ADD,
+					D3D12_LOGIC_OP_NOOP,
+					D3D12_COLOR_WRITE_ENABLE_ALL,
+				},
+			{},{},{},{},{},{},{}
+			}
+		};
+
+		const D3D12_BLEND_DESC premultiplied{
+			0,
+			0,
+			{
+				{
+					1,
+					0,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_INV_SRC_ALPHA,
+					D3D12_BLEND_OP_ADD,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_ONE,
+					D3D12_BLEND_OP_ADD,
+					D3D12_LOGIC_OP_NOOP,
+					D3D12_COLOR_WRITE_ENABLE_ALL,
+				},
+			{},{},{},{},{},{},{}
+			}
+		};
+	} blend_state;
+
+	constexpr u64 align_size_for_constant_buffer(u64 size)
+	{
+		return math::align_size_up<D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT>(size);
+	}
+
+	constexpr u64 align_size_for_texture(u64 size)
+	{
+		return math::align_size_up<D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT>(size);
+	}
+
+	class d3d12_resource_barrier
+	{
+	public:
+		constexpr static u32 max_resource_barriers{ 32 };
+		constexpr void add(ID3D12Resource* resource, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after,
+			D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+			u32 subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES)
+		{
+			assert(resource);
+			assert(_offset < max_resource_barriers);
+
+			D3D12_RESOURCE_BARRIER& barrier{ _barriers[_offset] };
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+			barrier.Flags = flags;
+			barrier.Transition.pResource = resource;
+			barrier.Transition.StateBefore = before;
+			barrier.Transition.StateAfter = after;
+			barrier.Transition.Subresource = subresource;
+
+			++_offset;
+		}
+
+		constexpr void add(ID3D12Resource* resource, D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+		{
+			assert(resource);
+			assert(_offset < max_resource_barriers);
+
+			D3D12_RESOURCE_BARRIER& barrier{ _barriers[_offset] };
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_UAV;
+			barrier.Flags = flags;
+			barrier.UAV.pResource = resource;
+
+			++_offset;
+		}
+
+		constexpr void add(ID3D12Resource* resource_before, ID3D12Resource* resource_after, D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE)
+		{
+			assert(resource_before && resource_after);
+			assert(_offset < max_resource_barriers);
+
+			D3D12_RESOURCE_BARRIER& barrier{ _barriers[_offset] };
+			barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_ALIASING;
+			barrier.Flags = flags;
+			barrier.Aliasing.pResourceBefore = resource_before;
+			barrier.Aliasing.pResourceAfter = resource_after;
+
+			++_offset;
+		}
+
+		void apply(id3d12_graphics_command_list* cmd_list)
+		{
+			assert(_offset);
+			cmd_list->ResourceBarrier(_offset, _barriers);
+			_offset = 0;
+		}
+	private:
+		D3D12_RESOURCE_BARRIER _barriers[max_resource_barriers]{};
+		u32 _offset{ 0 };
+	};
+
+	void transition_resource(
+		id3d12_graphics_command_list* cmd_list,
+		ID3D12Resource* resource,
+		D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after,
+		D3D12_RESOURCE_BARRIER_FLAGS flags = D3D12_RESOURCE_BARRIER_FLAG_NONE,
+		u32 subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES);
 
 	ID3D12RootSignature* create_root_signature(const D3D12_ROOT_SIGNATURE_DESC1& desc);
 
@@ -33,17 +321,23 @@ namespace triengine::graphics::d3d12::d3dx {
 			Constants.RegisterSpace = space;
 		}
 
-		constexpr void as_cbv(u32 shader_register, D3D12_SHADER_VISIBILITY visibility, u32 space = 0, D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
+		constexpr void as_cbv(D3D12_SHADER_VISIBILITY visibility,
+			u32 shader_register, u32 space = 0,
+			D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
 		{
 			as_descriptor(D3D12_ROOT_PARAMETER_TYPE_CBV, visibility, shader_register, space, flags);
 		}
 
-		constexpr void as_sbv(u32 shader_register, D3D12_SHADER_VISIBILITY visibility, u32 space = 0, D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
+		constexpr void as_srv(D3D12_SHADER_VISIBILITY visibility,
+			u32 shader_register, u32 space = 0,
+			D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
 		{
 			as_descriptor(D3D12_ROOT_PARAMETER_TYPE_SRV, visibility, shader_register, space, flags);
 		}
 
-		constexpr void as_uav(u32 shader_register, D3D12_SHADER_VISIBILITY visibility, u32 space = 0, D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
+		constexpr void as_uav(D3D12_SHADER_VISIBILITY visibility,
+			u32 shader_register, u32 space = 0,
+			D3D12_ROOT_DESCRIPTOR_FLAGS flags = D3D12_ROOT_DESCRIPTOR_FLAG_NONE)
 		{
 			as_descriptor(D3D12_ROOT_PARAMETER_TYPE_UAV, visibility, shader_register, space, flags);
 		}
@@ -69,12 +363,24 @@ namespace triengine::graphics::d3d12::d3dx {
 
 	struct d3d12_root_signature_desc : public D3D12_ROOT_SIGNATURE_DESC1
 	{
-		constexpr explicit d3d12_root_signature_desc(const d3d12_root_parameter* parameters, u32 parameter_count, const D3D12_STATIC_SAMPLER_DESC* static_samples = nullptr, u32 sampler_count = 0,
-			D3D12_ROOT_SIGNATURE_FLAGS flags = D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
-			D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
-			D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
-			D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
-			D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS) : D3D12_ROOT_SIGNATURE_DESC1{ parameter_count, parameters, sampler_count, static_samples, flags }
+		constexpr static D3D12_ROOT_SIGNATURE_FLAGS default_flags{
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS |
+		   D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED |
+		   D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
+		};
+
+		constexpr explicit d3d12_root_signature_desc(const d3d12_root_parameter* parameters,
+			u32 parameter_count,
+			D3D12_ROOT_SIGNATURE_FLAGS flags = default_flags,
+			const D3D12_STATIC_SAMPLER_DESC* static_samplers = nullptr,
+			u32 sampler_count = 0)
+			: D3D12_ROOT_SIGNATURE_DESC1{ parameter_count, parameters, sampler_count, static_samplers, flags }
 		{}
 
 		ID3D12RootSignature* create() const
@@ -115,7 +421,7 @@ namespace triengine::graphics::d3d12::d3dx {
 	PSS(render_target_formats, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_RENDER_TARGET_FORMATS, D3D12_RT_FORMAT_ARRAY);
 	PSS(depth_stencil_format, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL_FORMAT, DXGI_FORMAT);
 	PSS(sample_desc, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_SAMPLE_DESC, DXGI_SAMPLE_DESC);
-	PSS(cache, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CACHED_PSO, D3D12_CACHED_PIPELINE_STATE);
+	PSS(cached_pso, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_CACHED_PSO, D3D12_CACHED_PIPELINE_STATE);
 	PSS(flags, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_FLAGS, D3D12_PIPELINE_STATE_FLAGS);
 	PSS(depth_stencil1, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_DEPTH_STENCIL1, D3D12_DEPTH_STENCIL_DESC1);
 	PSS(view_instancing, D3D12_PIPELINE_STATE_SUBOBJECT_TYPE_VIEW_INSTANCING, D3D12_VIEW_INSTANCING_DESC);
@@ -124,6 +430,37 @@ namespace triengine::graphics::d3d12::d3dx {
 
 #undef PSS
 
+	struct d3d12_pipeline_state_subobject_stream {
+		d3d12_pipeline_state_subobject_root_signature root_signature{ nullptr };
+		d3d12_pipeline_state_subobject_vs vs{};
+		d3d12_pipeline_state_subobject_ps ps{};
+		d3d12_pipeline_state_subobject_ds ds{};
+		d3d12_pipeline_state_subobject_hs hs{};
+		d3d12_pipeline_state_subobject_gs gs{};
+		d3d12_pipeline_state_subobject_cs cs{};
+		d3d12_pipeline_state_subobject_stream_output stream_output{};
+		d3d12_pipeline_state_subobject_blend blend{blend_state.disabled};
+		d3d12_pipeline_state_subobject_sample_mask sample_mask{ UINT_MAX };
+		d3d12_pipeline_state_subobject_rasterizer rasterizer{ rasterizer_state.no_cull };
+		d3d12_pipeline_state_subobject_input_layout input_layout{};
+		d3d12_pipeline_state_subobject_ib_strip_cut_value ib_strip_cut_value{};
+		d3d12_pipeline_state_subobject_primitive_topology primitive_topology{};
+		d3d12_pipeline_state_subobject_render_target_formats render_target_formats{};
+		d3d12_pipeline_state_subobject_depth_stencil_format depth_stencil_format{};
+		d3d12_pipeline_state_subobject_sample_desc sample_desc{ {1, 0} };
+		d3d12_pipeline_state_subobject_cached_pso cached_pso{};
+		d3d12_pipeline_state_subobject_flags flags{};
+		d3d12_pipeline_state_subobject_depth_stencil1 depth_stencil1{ depth_state.disabled };
+		d3d12_pipeline_state_subobject_view_instancing view_instancing{};
+		d3d12_pipeline_state_subobject_as as{};
+		d3d12_pipeline_state_subobject_ms ms{};
+	};
+
 	ID3D12PipelineState* create_pipeline_state(D3D12_PIPELINE_STATE_STREAM_DESC desc);
 	ID3D12PipelineState* create_pipeline_state(void* stream, u64 stream_size);
+
+	ID3D12Resource* create_buffer(const void* data, u32 buffer_size, bool is_cpu_accessible = false,
+		D3D12_RESOURCE_STATES state = D3D12_RESOURCE_STATE_COMMON,
+		D3D12_RESOURCE_FLAGS flags = D3D12_RESOURCE_FLAG_NONE,
+		ID3D12Heap* heap = nullptr, u64 heap_offset = 0);
 }

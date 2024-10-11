@@ -133,18 +133,15 @@ namespace TriEngineEditor.Content
 
         private void OnSave_Button_Click(object sender, RoutedEventArgs e)
         {
-            SaveFileDialog dlg = new SaveFileDialog()
+            var dlg = new SaveDialog();
+            if(dlg.ShowDialog() == true)
             {
-                InitialDirectory = Project.Current?.ContentPath,
-                Filter = "TriEngine Asset (*.asset)|*.asset",
-            };
-
-            if (dlg.ShowDialog() == true)
-            {
-                Debug.Assert(!string.IsNullOrEmpty(dlg.FileName));
+                Debug.Assert(!string.IsNullOrEmpty(dlg.SaveFilePath));
                 var asset = (DataContext as IAssetEditor).Asset;
                 Debug.Assert(asset != null);
-                asset.Save(dlg.FileName);
+                asset.Save(dlg.SaveFilePath);
+
+                // Note: you can chose to close this dialog after saving the asset
             }
         }
     }

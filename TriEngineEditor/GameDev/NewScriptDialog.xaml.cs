@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -55,8 +56,9 @@ namespace {1} {{
 
         private static string GetNamespaceFromProjectName()
         {
-            var projectName = Project.Current.Name;
-            projectName = projectName.Replace(' ', '_');
+            var projectName = Project.Current?.Name.Trim();
+            if (string.IsNullOrEmpty(projectName)) return string.Empty;
+
             return projectName;
         }
 
@@ -67,9 +69,10 @@ namespace {1} {{
             var name = scriptName.Text.Trim();
             var path = scriptPath.Text.Trim();
             string errorMsg = string.Empty;
+            var nameRegex = new Regex(@"^[a-zA-Z_][a-zA-Z0-9_]*$");
             if (string.IsNullOrEmpty(name)) {
                 errorMsg = "Script name cannot be empty.";
-            } else if (name.IndexOfAny(Path.GetInvalidFileNameChars()) != -1 || name.Any(x => char.IsWhiteSpace(x))) {
+            } else if (!nameRegex.IsMatch(name)) {
                 errorMsg = "Script name contains invalid characters.";
             } else if (string.IsNullOrEmpty(path)) {
                 errorMsg = "Script path cannot be empty.";
@@ -162,11 +165,7 @@ namespace {1} {{
 
             string[] files = [cpp, h];
 
-            for (int i = 0; i < 3; ++i)
-            {
-                if (!VisualStudio.AddFilesToSolution(solution, projectName, files)) System.Threading.Thread.Sleep(1000);
-                else break;
-            }
+            VisualStudio.AddFilesToSolution(solution, projectName, files);
         }
 
         public NewScriptDialog()

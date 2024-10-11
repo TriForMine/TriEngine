@@ -18,31 +18,24 @@
     <Optimize>True</Optimize>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="envdte" Version="17.10.40170" />
+    <PackageReference Include="envdte80" Version="17.10.40170" />
+  </ItemGroup>
   
   <ItemGroup>
-    <COMReference Include="EnvDTE">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>8</VersionMajor>
-      <Guid>80cc9f66-e7d8-4ddd-85b6-d9e6cd0e93e2</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
-    <COMReference Include="EnvDTE80">
-      <WrapperTool>tlbimp</WrapperTool>
-      <VersionMinor>0</VersionMinor>
-      <VersionMajor>8</VersionMajor>
-      <Guid>1a31287a-4d7d-413e-8e32-3b374931bd89</Guid>
-      <Lcid>0</Lcid>
-      <Isolated>false</Isolated>
-      <EmbedInteropTypes>true</EmbedInteropTypes>
-    </COMReference>
+    <Resource Include="Resources\ContentBrowser\ListView.png" />
+    <Resource Include="Resources\ContentBrowser\TileView.png" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Resource Include="Resources\ContentBrowser\FolderLarge.png" />
+    <Resource Include="Resources\ContentBrowser\FolderSmall.png" />
   </ItemGroup>
 
   
   <ItemGroup>
     <Resource Include="Resources\PrimitiveMeshView\PlaneTexture.png" />
   </ItemGroup>
-
+  
 </Project>

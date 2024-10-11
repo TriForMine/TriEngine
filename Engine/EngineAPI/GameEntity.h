@@ -8,19 +8,19 @@ namespace triengine {
 
 	namespace game_entity {
 
-		DEFINE_TYPED_ID(entity_id);
+		DEFINE_TYPED_ID(item_id);
 
 		class entity {
 		public:
-			constexpr entity(entity_id id) : _id{ id } {}
+			constexpr entity(item_id id) : _id{ id } {}
 			constexpr entity() : _id{ id::invalid_id } {}
-			constexpr entity_id get_id() const { return _id; }
+			constexpr item_id get_id() const { return _id; }
 			constexpr bool is_valid() const { return id::is_valid(_id); }
 
 			transform::component transform() const;
 			script::component script() const;
 		private:
-			entity_id _id;
+			item_id _id;
 		};
 
 	}; // namespace game_entity
