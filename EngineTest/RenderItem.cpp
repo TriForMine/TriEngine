@@ -88,7 +88,7 @@ void destroy_render_item(id::id_type item_id)
 		auto pair = render_item_entity_map.find(item_id);
 		if (pair != render_item_entity_map.end())
 		{
-			game_entity::remove(game_entity::item_id{ pair->second });
+			game_entity::remove(game_entity::entity_id{ pair->second });
 			render_item_entity_map.erase(pair);
 		}
 	}

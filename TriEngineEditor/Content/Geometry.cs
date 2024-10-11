@@ -485,7 +485,7 @@ namespace TriEngineEditor.Content
                 }
 
                 // For Testing. Remove Later!
-                // PackForEngine();
+                PackForEngine();
                 // For Testing. Remove Later!
             }
             catch (Exception ex)
