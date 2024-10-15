@@ -22,6 +22,12 @@ namespace triengine::graphics::d3d12::gpass {
 		constexpr f32 clear_value[4]{ 0.f, 0.f, 0.f, 1.f };
 #endif
 
+#if USE_STL_VECTOR
+#define CONSTEPXR
+#else
+#define CONSTEPXR constexpr
+#endif
+
 		struct gpass_cache
 		{
 			utl::vector<id::id_type> d3d12_render_item_ids;
@@ -70,17 +76,17 @@ namespace triengine::graphics::d3d12::gpass {
 				};
 			}
 
-			constexpr u32 size() const
+			CONSTEPXR u32 size() const
 			{
 				return (u32)d3d12_render_item_ids.size();
 			}
 
-			constexpr void clear()
+			CONSTEPXR void clear()
 			{
 				d3d12_render_item_ids.clear();
 			}
 
-			constexpr void resize()
+			CONSTEPXR void resize()
 			{
 				const u64 items_count{ d3d12_render_item_ids.size()};
 				const u64 new_buffer_size{ items_count * struct_size };
@@ -127,6 +133,8 @@ namespace triengine::graphics::d3d12::gpass {
 
 			utl::vector<u8> _buffer;
 		} frame_cache;
+
+#undef CONSTEXPR
 
 		bool create_buffers(math::u32v2 size)
 		{

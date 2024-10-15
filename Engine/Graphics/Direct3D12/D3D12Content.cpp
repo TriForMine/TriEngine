@@ -307,6 +307,15 @@ namespace triengine::graphics::d3d12::content {
 		}
 	}
 
+#pragma intrinsic(_BitScanForward)
+	shader_type::type get_shader_type(u32 flag)
+	{
+		assert(flag);
+		unsigned long index;
+		_BitScanForward(&index, flag);
+		return (shader_type::type)index;
+	}
+
 	pso_id create_pso(id::id_type material_id, D3D12_PRIMITIVE_TOPOLOGY primitive_topology, u32 elements_type)
 	{
 		constexpr u64 aligned_stream_size{ math::align_size_up<sizeof(u64)>(sizeof(d3dx::d3d12_pipeline_state_subobject_stream)) };
@@ -338,7 +347,8 @@ namespace triengine::graphics::d3d12::content {
 			{
 				if (flags & (1 << i))
 				{
-					triengine::content::compiled_shader_ptr shader{ triengine::content::get_shader(material.shader_ids()[shader_index]) };
+					const u32 key{ get_shader_type(flags & (1 << i)) == shader_type::vertex ? elements_type : u32_invalid_id };
+					triengine::content::compiled_shader_ptr shader{ triengine::content::get_shader(material.shader_ids()[shader_index], key) };
 					assert(shader);
 					shaders[i].pShaderBytecode = shader->byte_code();
 					shaders[i].BytecodeLength = shader->byte_code_size();
